@@ -180,7 +180,7 @@ local CONFIG = {
 		RecheckInterval = 8,
 		UpgradeMargin = 3,
 		Low = { Shimmer = false, Blur = false, Instant = true, DurationScale = 0.8, ScalePop = false },
-		Medium = { Shimmer = true, Blur = false, Instant = false, DurationScale = 0.95, ScalePop = false },
+		Medium = { Shimmer = true, Blur = false, Instant = false, DurationScale = 0.95, ScalePop = true },
 		High = { Shimmer = true, Blur = true, Instant = false, DurationScale = 1, ScalePop = true },
 	},
 	Gallery = {
@@ -732,7 +732,7 @@ local ToastSeq = 0
 local Blur
 local CURRENT_THEME = copyTable(CONFIG.Theme)
 local TC = {}
-local QUALITY = { Name = "Medium", Shimmer = true, Blur = false, Instant = false, DurationScale = 1, ScalePop = false }
+local QUALITY = { Name = "Medium", Shimmer = true, Blur = false, Instant = false, DurationScale = 1, ScalePop = true }
 local TOKEN = 0
 local PLAYING = false
 local DESTROYED = false
@@ -790,10 +790,29 @@ local function trackStageConn(c)
 	return c
 end
 
+local TWEEN_INDEX = setmetatable({}, { __mode = "k" })
+
+local function cancelPropTweens(target, props)
+	local index = TWEEN_INDEX[target]
+	if not index then
+		return
+	end
+	for key in pairs(props) do
+		local existing = index[key]
+		if existing then
+			index[key] = nil
+			pcall(function()
+				existing:Cancel()
+			end)
+		end
+	end
+end
+
 local function playTween(target, info, props, list)
 	if DESTROYED or target == nil then
 		return nil
 	end
+	cancelPropTweens(target, props)
 	local ok, tw = pcall(function()
 		return TweenService:Create(target, info, props)
 	end)
@@ -806,9 +825,18 @@ local function playTween(target, info, props, list)
 	if not played then
 		return nil
 	end
+	local index = TWEEN_INDEX[target]
+	if not index then
+		index = {}
+		TWEEN_INDEX[target] = index
+	end
+	for key in pairs(props) do
+		index[key] = tw
+	end
 	local store = list or TWEENS
 	for i = #store, 1, -1 do
-		if store[i].PlaybackState ~= Enum.PlaybackState.Playing then
+		local item = store[i]
+		if item.PlaybackState ~= Enum.PlaybackState.Playing then
 			table.remove(store, i)
 		end
 	end
@@ -818,14 +846,6 @@ end
 
 local function uiTween(target, props, duration, style, dir)
 	if target == nil then
-		return nil
-	end
-	if QUALITY.Instant then
-		for k, v in pairs(props) do
-			pcall(function()
-				target[k] = v
-			end)
-		end
 		return nil
 	end
 	return playTween(target, ti(mdur(duration or CONFIG.Durations.Hover), style or "Quad", dir or "Out"), props)
@@ -839,6 +859,15 @@ local function cancelList(list)
 		end)
 		table.remove(list, i)
 	end
+end
+
+local function hoverTime(entering)
+	local base = CONFIG.Durations.Hover
+	return entering and base * 0.6 or base * 1.25
+end
+
+local function hoverTween(target, props, entering)
+	return uiTween(target, props, hoverTime(entering), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
 end
 
 local function new(class, props, parent)
@@ -1813,33 +1842,47 @@ local function makeButton(parent, opts)
 
 	local function paint(duration, style, dir)
 		uiTween(btn, { BackgroundColor3 = faceColor(), BackgroundTransparency = faceAlpha() }, duration, style, dir)
-		if scale then
-			uiTween(scale, { Scale = state.pressed and 0.985 or (state.hover and 1.01 or 1) }, duration, style, dir)
+	end
+
+	local function paintScale(duration, style, dir)
+		if not scale then
+			return
 		end
+		uiTween(scale, { Scale = state.pressed and 0.972 or (state.hover and 1.012 or 1) }, duration, style, dir)
 	end
 
 	trackConn(btn.MouseEnter:Connect(function()
-		if not state.enabled then
+		if not state.enabled or state.hover then
 			return
 		end
 		state.hover = true
-		paint(CONFIG.Durations.Hover, CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
+		paint(hoverTime(true), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
+		paintScale(hoverTime(true), "Quad", "Out")
 	end))
 	trackConn(btn.MouseLeave:Connect(function()
+		if not state.hover and not state.pressed then
+			return
+		end
 		state.hover = false
 		state.pressed = false
-		paint(CONFIG.Durations.Hover, CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
+		paint(hoverTime(false), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
+		paintScale(hoverTime(false), "Quad", "Out")
 	end))
 	trackConn(btn.MouseButton1Down:Connect(function()
-		if not state.enabled then
+		if not state.enabled or state.pressed then
 			return
 		end
 		state.pressed = true
-		paint(CONFIG.Durations.Press, CONFIG.Easing.Press, CONFIG.Easing.PressDir)
+		paint(CONFIG.Durations.Press * 0.6, CONFIG.Easing.Press, CONFIG.Easing.PressDir)
+		paintScale(CONFIG.Durations.Press * 0.6, "Quad", "Out")
 	end))
 	trackConn(btn.MouseButton1Up:Connect(function()
+		if not state.pressed then
+			return
+		end
 		state.pressed = false
-		paint(CONFIG.Durations.Hover, CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
+		paint(hoverTime(true), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
+		paintScale(hoverTime(false), "Back", "Out")
 	end))
 
 	if opts.Divider then
@@ -1951,13 +1994,19 @@ local function makeToggle(parent, opts)
 
 	trackConn(pill.InputBegan:Connect(accept))
 	trackConn(text.InputBegan:Connect(accept))
+	trackConn(row.InputBegan:Connect(function(input)
+		if input.Target ~= row then
+			return
+		end
+		accept(input)
+	end))
 	trackConn(row.MouseEnter:Connect(function()
 		state.hover = true
-		uiTween(row, { BackgroundTransparency = 0.9 }, CONFIG.Durations.Hover, "Quad", "Out")
+		hoverTween(row, { BackgroundTransparency = 0.9 }, true)
 	end))
 	trackConn(row.MouseLeave:Connect(function()
 		state.hover = false
-		uiTween(row, { BackgroundTransparency = 1 }, CONFIG.Durations.Hover, "Quad", "Out")
+		hoverTween(row, { BackgroundTransparency = 1 }, false)
 	end))
 
 	if opts.Divider ~= false then
@@ -2048,11 +2097,11 @@ local function makeListRow(parent, opts)
 
 	trackConn(row.MouseEnter:Connect(function()
 		state.hover = true
-		uiTween(row, { BackgroundTransparency = 0.9 }, CONFIG.Durations.Hover, "Quad", "Out")
+		hoverTween(row, { BackgroundTransparency = 0.9 }, true)
 	end))
 	trackConn(row.MouseLeave:Connect(function()
 		state.hover = false
-		uiTween(row, { BackgroundTransparency = 1 }, CONFIG.Durations.Hover, "Quad", "Out")
+		hoverTween(row, { BackgroundTransparency = 1 }, false)
 	end))
 
 	if opts.Divider ~= false then
@@ -2105,13 +2154,13 @@ local function makeTextInput(parent, opts)
 	end
 
 	trackConn(box.Focused:Connect(function()
-		playTween(stroke, ti(mdur(CONFIG.Durations.Hover), "Quad", "Out"), {
+		playTween(stroke, ti(mdur(hoverTime(true)), "Quad", "Out"), {
 			Color = TC.accent,
 			Transparency = 0.25,
 		})
 	end))
 	trackConn(box.FocusLost:Connect(function(enter)
-		playTween(stroke, ti(mdur(CONFIG.Durations.Hover), "Quad", "Out"), {
+		playTween(stroke, ti(mdur(hoverTime(false)), "Quad", "Out"), {
 			Color = Color3.new(1, 1, 1),
 			Transparency = CURRENT_THEME.StrokeTransparency,
 		})
@@ -2245,8 +2294,8 @@ local function makeSlider(parent, opts)
 	local function place(animated)
 		local a = alphaOf(state.value)
 		if animated then
-			uiTween(fill, { Size = UDim2.new(a, 0, 1, 0) }, CONFIG.Durations.Hover, CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
-			uiTween(knob, { Position = UDim2.new(a, 0, 0.5, 0) }, CONFIG.Durations.Hover, CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
+			uiTween(fill, { Size = UDim2.new(a, 0, 1, 0) }, hoverTime(false), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
+			uiTween(knob, { Position = UDim2.new(a, 0, 0.5, 0) }, hoverTime(false), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
 		else
 			fill.Size = UDim2.new(a, 0, 1, 0)
 			knob.Position = UDim2.new(a, 0, 0.5, 0)
@@ -2315,10 +2364,10 @@ local function makeSlider(parent, opts)
 		place(true)
 	end))
 	trackConn(trackFrame.MouseEnter:Connect(function()
-		uiTween(knob, { Size = UDim2.new(0, 15, 0, 15) }, CONFIG.Durations.Hover, "Quad", "Out")
+		hoverTween(knob, { Size = UDim2.new(0, 15, 0, 15) }, true)
 	end))
 	trackConn(trackFrame.MouseLeave:Connect(function()
-		uiTween(knob, { Size = UDim2.new(0, 12, 0, 12) }, CONFIG.Durations.Hover, "Quad", "Out")
+		hoverTween(knob, { Size = UDim2.new(0, 12, 0, 12) }, false)
 	end))
 
 	local function refresh()
@@ -2632,10 +2681,23 @@ toast = function(text, isError)
 	end
 	ToastSeq = ToastSeq + 1
 	local ref = ToastSeq
+	local onScreen = ToastGroup.Visible and ToastGroup.GroupTransparency < 0.5
 	ToastGroup.Visible = true
-	ToastGroup.GroupTransparency = 1
-	ToastGroup.Position = UDim2.new(1, 56, 0, 16)
-	playTween(ToastGroup, ti(dur(CONFIG.Durations.Slide), CONFIG.Easing.Slide, CONFIG.Easing.SlideDir), { Position = UDim2.new(1, -16, 0, 16), GroupTransparency = 0 })
+	if onScreen and not QUALITY.Instant then
+		ToastGroup.Position = UDim2.new(1, -16, 0, 16)
+		playTween(ToastGroup, ti(mdur(0.12), "Quad", "Out"), { GroupTransparency = 0 })
+		playTween(ToastGroup, ti(mdur(0.16), "Quint", "Out"), { Position = UDim2.new(1, -23, 0, 16) })
+		task.delay(mdur(0.2), function()
+			if DESTROYED or ToastSeq ~= ref or not ToastGroup then
+				return
+			end
+			playTween(ToastGroup, ti(mdur(0.24), "Quint", "Out"), { Position = UDim2.new(1, -16, 0, 16) })
+		end)
+	else
+		ToastGroup.GroupTransparency = 1
+		ToastGroup.Position = UDim2.new(1, 56, 0, 16)
+		playTween(ToastGroup, ti(dur(CONFIG.Durations.Slide), CONFIG.Easing.Slide, CONFIG.Easing.SlideDir), { Position = UDim2.new(1, -16, 0, 16), GroupTransparency = 0 })
+	end
 	task.delay(math.max(2, dur(CONFIG.Durations.Fade) * 4), function()
 		if DESTROYED or ToastSeq ~= ref or not ToastGroup then
 			return
@@ -3424,6 +3486,16 @@ local function buildMain()
 		ClipsDescendants = true,
 		ZIndex = 2,
 	}, ContentPanel)
+	local pagesVeil = new("Frame", {
+		Name = "Veil",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = TC.base,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Active = false,
+		ZIndex = 20,
+		Role = "Surface",
+	}, pagesHost)
 	local pages = {}
 	local pageMeta = {}
 	local navRows = {}
@@ -3445,29 +3517,38 @@ local function buildMain()
 		end
 		inn.Visible = true
 		inn.ZIndex = 3
-		inn.Position = UDim2.fromOffset(0, 14)
 		local slideTime = mdur(CONFIG.Durations.Slide)
-		local pillTime = mdur(0.22)
+		local pillTime = mdur(0.24)
+		local fadeTime = mdur(0.2)
 		if QUALITY.Instant then
-			slideTime = math.min(slideTime, 0.16)
-			pillTime = math.min(pillTime, 0.12)
+			inn.Position = UDim2.fromOffset(0, 0)
+			slideTime = 0.16
+			pillTime = 0.12
+			fadeTime = 0.1
+		else
+			inn.Position = UDim2.fromOffset(0, 10)
+			playTween(inn, ti(slideTime, CONFIG.Easing.Slide, CONFIG.Easing.SlideDir), { Position = UDim2.fromOffset(0, 0) })
+			if pagesVeil then
+				pagesVeil.BackgroundTransparency = 0.84
+				playTween(pagesVeil, ti(fadeTime + 0.1, "Quad", "Out"), { BackgroundTransparency = 1 })
+			end
 		end
-		playTween(inn, ti(slideTime, CONFIG.Easing.Slide, CONFIG.Easing.SlideDir), { Position = UDim2.fromOffset(0, 0) })
 		if NavPill then
 			playTween(NavPill, ti(pillTime, "Quint", "Out"), { Position = UDim2.new(0, 0, 0, (index - 1) * 34) })
 		end
 		for i, row in ipairs(navRows) do
 			local on = i == index
 			local label = navLabels[i]
+			local icon = navIcons[i]
 			if on then
 				row.BackgroundTransparency = 1
 				label:SetAttribute("Tier", "Accent")
-				tintIcon(navIcons[i], TC.accent, true)
-				uiTween(label, { TextColor3 = TC.accent }, 0.18, "Quad", "Out")
+				tintIcon(icon, TC.accent, true)
+				uiTween(label, { TextColor3 = TC.accent }, 0.2, "Quad", "Out")
 			else
 				label:SetAttribute("Tier", "Secondary")
-				tintIcon(navIcons[i], TC.textDisabled, true)
-				uiTween(label, { TextColor3 = TC.textSecondary }, 0.18, "Quad", "Out")
+				tintIcon(icon, TC.textDisabled, true)
+				uiTween(label, { TextColor3 = TC.textSecondary }, 0.2, "Quad", "Out")
 			end
 		end
 		local meta = pageMeta[index]
@@ -3476,6 +3557,8 @@ local function buildMain()
 			BannerSubtitle.Text = meta.subtitle or ""
 			BannerTitle.TextTransparency = 1
 			uiTween(BannerTitle, { TextTransparency = 0 }, 0.2, "Quad", "Out")
+			BannerSubtitle.TextTransparency = 1
+			uiTween(BannerSubtitle, { TextTransparency = 0 }, 0.26, "Quad", "Out")
 		end
 	end
 
@@ -3549,12 +3632,12 @@ local function buildMain()
 		end))
 		trackConn(row.MouseEnter:Connect(function()
 			if index ~= activeIndex then
-				uiTween(row, { BackgroundTransparency = 0.94 }, CONFIG.Durations.Hover, "Quad", "Out")
+				hoverTween(row, { BackgroundTransparency = 0.94 }, true)
 			end
 		end))
 		trackConn(row.MouseLeave:Connect(function()
 			if index ~= activeIndex then
-				uiTween(row, { BackgroundTransparency = 1 }, CONFIG.Durations.Hover, "Quad", "Out")
+				hoverTween(row, { BackgroundTransparency = 1 }, false)
 			end
 		end))
 		if index == 1 then
@@ -4450,26 +4533,56 @@ openCustomize = function()
 	end
 	CustomizeOpen = true
 	Customize.Visible = not UserHidden
+	local modal = Customize:FindFirstChild("Modal")
 	local panel = Customize:FindFirstChild("Panel")
-	if panel then
-		local scale = panel:FindFirstChildOfClass("UIScale")
-		if not scale then
-			scale = new("UIScale", { Scale = 0.96 }, panel)
-		end
-		if QUALITY.Instant then
+	local scale = panel and panel:FindFirstChildOfClass("UIScale")
+	if panel and not scale then
+		scale = new("UIScale", { Scale = 0.96 }, panel)
+	end
+	if QUALITY.Instant then
+		if scale then
 			scale.Scale = 1
-		else
-			scale.Scale = 0.96
-			playTween(scale, ti(mdur(CONFIG.Durations.Toggle), "Quint", "Out"), { Scale = 1 })
 		end
+		if modal then
+			modal.BackgroundTransparency = CURRENT_THEME.DimTransparency
+		end
+		return
+	end
+	if modal then
+		modal.BackgroundTransparency = 0.9
+		playTween(modal, ti(mdur(CONFIG.Durations.Fade), CONFIG.Easing.Fade, "Out"), { BackgroundTransparency = CURRENT_THEME.DimTransparency })
+	end
+	if scale then
+		scale.Scale = 0.96
+		playTween(scale, ti(mdur(CONFIG.Durations.Transition), "Quint", "Out"), { Scale = 1 })
 	end
 end
 
 closeCustomize = function()
 	CustomizeOpen = false
-	if Customize then
-		Customize.Visible = false
+	if not Customize then
+		return
 	end
+	local modal = Customize:FindFirstChild("Modal")
+	local panel = Customize:FindFirstChild("Panel")
+	local scale = panel and panel:FindFirstChildOfClass("UIScale")
+	if QUALITY.Instant or not modal then
+		Customize.Visible = false
+		return
+	end
+	playTween(modal, ti(mdur(CONFIG.Durations.Fade) * 0.8, "Quad", "In"), { BackgroundTransparency = 1 })
+	if scale then
+		playTween(scale, ti(mdur(CONFIG.Durations.Fade) * 0.8, "Quad", "In"), { Scale = 0.97 })
+	end
+	local waitTime = mdur(CONFIG.Durations.Fade) * 0.8 + 0.02
+	task.delay(waitTime, function()
+		if DESTROYED or not Customize then
+			return
+		end
+		if not CustomizeOpen then
+			Customize.Visible = false
+		end
+	end)
 end
 
 applyConfigNow = function()
