@@ -170,19 +170,6 @@ local CONFIG = {
 		Theme = "Quint",
 		ThemeDir = "Out",
 	},
-	Quality = {
-		Auto = true,
-		Level = "Auto",
-		FpsLow = 30,
-		FpsHigh = 50,
-		SampleFrames = 16,
-		WarmupFrames = 6,
-		RecheckInterval = 8,
-		UpgradeMargin = 3,
-		Low = { Shimmer = false, Blur = false, Instant = true, DurationScale = 0.8, ScalePop = false },
-		Medium = { Shimmer = true, Blur = false, Instant = false, DurationScale = 0.95, ScalePop = true },
-		High = { Shimmer = true, Blur = true, Instant = false, DurationScale = 1, ScalePop = true },
-	},
 	Gallery = {
 		DefaultSpeed = 1,
 		CountdownEnabled = true,
@@ -205,9 +192,7 @@ local CONFIG = {
 		BackdropColor = "#0B0609",
 		BackdropTransparency = 0.01,
 		PetalColor = "#F49BC0",
-		PetalCount = 14,
 		TitleColor = "#FCEFF4",
-		SubColor = "#C79BAC",
 		LogoMode = "Mark",
 		LogoImageId = "",
 		LogoSize = 64,
@@ -690,20 +675,6 @@ local CONFIG_SCHEMA = {
 			{ key = "MinScale", type = "number", min = 0.3, max = 1 },
 		},
 	},
-	{
-		key = "Quality",
-		type = "group",
-		fields = {
-			{ key = "Level", type = "enum", options = { "Auto", "Low", "Medium", "High" } },
-			{ key = "Auto", type = "bool" },
-			{ key = "FpsLow", type = "number", min = 10, max = 120 },
-			{ key = "FpsHigh", type = "number", min = 15, max = 240 },
-			{ key = "SampleFrames", type = "number", min = 4, max = 240 },
-			{ key = "WarmupFrames", type = "number", min = 0, max = 60 },
-			{ key = "RecheckInterval", type = "number", min = 0, max = 120 },
-			{ key = "UpgradeMargin", type = "number", min = 0, max = 15 },
-		},
-	},
 	{ key = "Theme", type = "theme" },
 }
 
@@ -717,7 +688,6 @@ local Stage
 local Main
 local MainColumn
 local MainScale
-local MainShadow
 local SidebarPanel
 local ContentPanel
 local BannerTitle
@@ -735,7 +705,7 @@ local ToastSeq = 0
 local Blur
 local CURRENT_THEME = copyTable(CONFIG.Theme)
 local TC = {}
-local QUALITY = { Name = "Medium", Shimmer = true, Blur = false, Instant = false, DurationScale = 1, ScalePop = true }
+local QUALITY = { Blur = true, Instant = false, DurationScale = 1, ScalePop = true }
 local TOKEN = 0
 local PLAYING = false
 local DESTROYED = false
@@ -745,6 +715,7 @@ local REFRESH = {}
 local CONNS = {}
 local TWEENS = {}
 local STAGE_TWEENS = {}
+local PETAL_TWEENS = {}
 local STAGE_CONNS = {}
 local DebugState = { conn = nil, visible = false, clock = 0, frames = 0, fps = 0, instances = nil, instClock = 0 }
 local GalleryState = { speed = 1, loop = false, countdown = true }
@@ -755,16 +726,8 @@ local function dur(v)
 	return v * CONFIG.Durations.Scale * QUALITY.DurationScale / ACTIVE_SPEED
 end
 
-local function isLowEnd()
-	return QUALITY.Name == "Low"
-end
-
 local function mdur(v)
-	local d = v * CONFIG.Durations.Scale * QUALITY.DurationScale / ACTIVE_SPEED
-	if isLowEnd() then
-		return math.min(d, 0.12)
-	end
-	return d
+	return v * CONFIG.Durations.Scale * QUALITY.DurationScale / ACTIVE_SPEED
 end
 
 local function ti(v, style, dir, repeatCount, reverses, delayTime)
@@ -1424,7 +1387,7 @@ local function applyTheme(th, animated)
 	cancelList(THEME_TWEENS)
 	CURRENT_THEME = copyTable(th)
 	recomputeColors(CURRENT_THEME)
-	if QUALITY.Name ~= "High" or PLAYING then
+	if PLAYING then
 		animated = false
 	end
 	local infoUse = ti(dur(CONFIG.Durations.ThemeCrossfade), CONFIG.Easing.Theme, CONFIG.Easing.ThemeDir)
@@ -2478,47 +2441,10 @@ local function stageGroup(width, height)
 	}, Stage)
 end
 
-local function petalRain()
-	if not Stage then
-		return
-	end
-	local vp = viewportSize()
-	local count = math.floor(clampNum(tonumber(CONFIG.Loading.PetalCount) or 0, 0, 32))
-	if count <= 0 or vp.X <= 0 or vp.Y <= 0 then
-		return
-	end
-	local petalColor = hexToColor(CONFIG.Loading.PetalColor or CONFIG.Loading.LogoColor)
-	for _ = 1, count do
-		local width = 7 + math.random() * 6
-		local height = width * 1.4
-		local x = math.random() * vp.X
-		local startY = -30 + math.random() * (vp.Y * 0.85)
-		local drift = (math.random() * 2 - 1) * 34
-		local travel = (vp.Y + 40) - startY
-		local fall = math.max(0.6, travel / (240 + math.random() * 140))
-		local spin = (math.random() * 2 - 1) * 190
-		local petal = new("Frame", {
-			Name = "Petal",
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.new(0, x, 0, startY),
-			Size = UDim2.new(0, width, 0, height),
-			BackgroundColor3 = petalColor,
-			BackgroundTransparency = 0.28 + math.random() * 0.3,
-			BorderSizePixel = 0,
-			ZIndex = 1,
-		}, Stage)
-		new("UICorner", { CornerRadius = UDim.new(0.5, 0), Role = "Dot" }, petal)
-		playTween(petal, ti(fall, "Linear", "Out"), {
-			Position = UDim2.new(0, x + drift, 0, vp.Y + 40),
-		}, STAGE_TWEENS)
-		playTween(petal, ti(fall, "Linear", "Out"), { Rotation = spin }, STAGE_TWEENS)
-	end
-end
-
 local function ambientPetals(parent, opts)
 	opts = opts or {}
 	local cfg = CONFIG.Ambient or {}
-	if not parent or isLowEnd() or cfg.Petals == false then
+	if not parent or cfg.Petals == false then
 		return
 	end
 	local vp = viewportSize()
@@ -2561,74 +2487,34 @@ local function ambientPetals(parent, opts)
 		new("UICorner", { CornerRadius = UDim.new(0.5, 0), Role = "Dot" }, petal)
 		playTween(petal, ti(fall, "Linear", "Out", -1, false, delayTime), {
 			Position = UDim2.new(0, x + drift, 0, spanH - 50),
-		})
+		}, PETAL_TWEENS)
 		playTween(petal, ti(fall * 1.6, "Linear", "Out", -1, false, delayTime), {
 			Rotation = petal.Rotation + 220,
-		})
+		}, PETAL_TWEENS)
+	end
+end
+
+local function setPetalsPaused(paused)
+	for i = 1, #PETAL_TWEENS do
+		local tw = PETAL_TWEENS[i]
+		pcall(function()
+			if paused == true then
+				tw:Pause()
+			elseif tw.PlaybackState ~= Enum.PlaybackState.Playing then
+				tw:Play()
+			end
+		end)
 	end
 end
 
 local function loaderSplash()
-	local markSize = clampNum(tonumber(CONFIG.Loading.LogoSize) or 64, 32, 160)
-	local spinTime = math.max(0.35, tonumber(CONFIG.Loading.LogoSpin) or 1.6)
-	local titleY = markSize + 14
-	local subY = titleY + 26
-	local barY = subY + 26
-	local groupH = barY + 14
-	local w = fitWidth(math.max(260, math.min(320, markSize + 160)))
+	local titleY = 6
+	local barY = 34
+	local groupH = barY + 10
+	local w = fitWidth(240)
 	local g = stageGroup(w, groupH)
-	if not isLowEnd() then
-		g.Position = UDim2.new(0.5, 0, 0.5, 10)
-		playTween(g, ti(dur(CONFIG.Durations.Splash) * 0.4, "Quint", "Out"), { Position = UDim2.fromScale(0.5, 0.5) })
-	end
-
-	local mark = new("Frame", {
-		Name = "Mark",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 2),
-		Size = UDim2.new(0, markSize, 0, markSize),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ZIndex = 3,
-	}, g)
-	local bloom = new("Frame", {
-		Name = "Bloom",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ZIndex = 3,
-	}, mark)
-	local petalTint = hexToColor(CONFIG.Loading.PetalColor or CONFIG.Loading.LogoColor)
-	local coreTint = hexToColor(CONFIG.Loading.LogoCoreColor)
-	for i = 1, 5 do
-		local angle = (i - 1) * math.pi * 2 / 5 - math.pi * 0.5
-		local petal = new("Frame", {
-			Name = "Petal",
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5 + math.cos(angle) * 0.21, 0.5 + math.sin(angle) * 0.21),
-			Size = UDim2.new(0, markSize * 0.34, 0, markSize * 0.42),
-			Rotation = (i - 1) * 72,
-			BackgroundColor3 = petalTint,
-			BackgroundTransparency = 0.1,
-			BorderSizePixel = 0,
-			ZIndex = 3,
-		}, bloom)
-		new("UICorner", { CornerRadius = UDim.new(0.5, 0), Role = "Dot" }, petal)
-	end
-	local core = new("Frame", {
-		Name = "Core",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.new(0, markSize * 0.24, 0, markSize * 0.24),
-		BackgroundColor3 = coreTint,
-		BorderSizePixel = 0,
-		ZIndex = 4,
-	}, bloom)
-	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, core)
-	playTween(bloom, ti(spinTime * 2, "Linear", "Out", -1), { Rotation = 360 }, STAGE_TWEENS)
-	petalRain()
+	g.Position = UDim2.new(0.5, 0, 0.5, 10)
+	playTween(g, ti(dur(CONFIG.Durations.Splash) * 0.4, "Quint", "Out"), { Position = UDim2.fromScale(0.5, 0.5) })
 
 	makeLabel({
 		Name = "Title",
@@ -2638,22 +2524,9 @@ local function loaderSplash()
 		Color = hexToColor(CONFIG.Loading.TitleColor or "#FCEFF4"),
 		Bold = true,
 		FixedSize = true,
-		TextSize = 17,
+		TextSize = 15,
 		Position = UDim2.new(0, 0, 0, titleY),
-		Size = UDim2.new(1, 0, 0, 24),
-		TextXAlignment = Enum.TextXAlignment.Center,
-		ZIndex = 3,
-	}, g)
-	makeLabel({
-		Name = "Sub",
-		Text = "loading",
-		Tier = "Secondary",
-		TextRole = "Caption",
-		Color = hexToColor(CONFIG.Loading.SubColor or "#C79BAC"),
-		FixedSize = true,
-		TextSize = 11,
-		Position = UDim2.new(0, 0, 0, subY),
-		Size = UDim2.new(1, 0, 0, 16),
+		Size = UDim2.new(1, 0, 0, 20),
 		TextXAlignment = Enum.TextXAlignment.Center,
 		ZIndex = 3,
 	}, g)
@@ -2661,7 +2534,7 @@ local function loaderSplash()
 		Name = "Progress",
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, barY),
-		Size = UDim2.new(0, 148, 0, 3),
+		Size = UDim2.new(0, 120, 0, 2),
 		BackgroundColor3 = TC.track,
 		BorderSizePixel = 0,
 		Role = "Track",
@@ -2782,9 +2655,6 @@ hideMain = function(instant)
 		return
 	end
 	local outTime = mdur(CONFIG.Durations.Fade) * 0.7
-	if MainScale then
-		uiTween(MainScale, { Scale = 0.97 }, outTime, "Quad", "In")
-	end
 	local p = MainColumn.Position
 	uiTween(MainColumn, { Position = UDim2.new(p.X.Scale, p.X.Offset, p.Y.Scale, p.Y.Offset + 10) }, outTime, "Quad", "In")
 	task.delay(outTime + 0.05, function()
@@ -2908,9 +2778,6 @@ local function updateScale()
 	if ContentPanel then
 		ContentPanel.Position = UDim2.new(0, sideW, 0, 38)
 		ContentPanel.Size = UDim2.new(1, -sideW, 1, -38)
-	end
-	if MainShadow then
-		MainShadow.Size = UDim2.new(0, w + 20, 0, h + 20)
 	end
 end
 
@@ -3206,17 +3073,9 @@ local function buildMain()
 	local L = CONFIG.Layout
 	local topH = 38
 	local headerH = 78
-	MainShadow = new("Frame", {
-		Name = "Shadow",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(0.5, 0, 0.5, 10),
-		Size = UDim2.new(0, 600, 0, 500),
-		BackgroundColor3 = Color3.new(0, 0, 0),
-		BackgroundTransparency = 0.68,
-		BorderSizePixel = 0,
-		ZIndex = 2,
-	}, Main)
-	new("UICorner", { CornerRadius = UDim.new(0, 18) }, MainShadow)
+	trackConn(Main:GetPropertyChangedSignal("Visible"):Connect(function()
+		setPetalsPaused(Main.Visible ~= true)
+	end))
 	ambientPetals(Main)
 	MainColumn = new("Frame", {
 		Name = "Window",
@@ -3241,6 +3100,7 @@ local function buildMain()
 		Height = 510,
 		Transparency = 0.55,
 	})
+	setPetalsPaused(Main.Visible ~= true)
 
 	local titlebar = new("Frame", {
 		Name = "Titlebar",
@@ -3408,9 +3268,6 @@ local function buildMain()
 		if drag.target then
 			drag.target = clampCenter(drag.target)
 		end
-		if MainShadow then
-			uiTween(MainShadow, { BackgroundTransparency = 0.68 }, CONFIG.Durations.Hover * 1.6, "Quad", "Out")
-		end
 	end
 
 	local function pushDrag(input)
@@ -3463,9 +3320,6 @@ local function buildMain()
 		drag.current = drag.center
 		cancelPropTweens(MainColumn, { Position = true })
 		startDragLoop()
-		if MainShadow then
-			uiTween(MainShadow, { BackgroundTransparency = 0.58 }, CONFIG.Durations.Hover * 1.6, "Quad", "Out")
-		end
 	end
 	trackConn(UserInputService.InputBegan:Connect(function(input)
 		beginDrag(input, false)
@@ -4339,7 +4193,7 @@ local function buildCustomize()
 	trackConn(configTab.Instance.MouseButton1Click:Connect(function()
 		CustomTab = "Config"
 		markTab("Config")
-		statusText("Config JSON mode. Paste Durations, Easing, Layout, Quality or Theme.", false)
+		statusText("Config JSON mode. Paste Durations, Easing, Layout or Theme.", false)
 	end))
 	trackConn(exp.Instance.MouseButton1Click:Connect(function()
 		if CustomTab == "Theme" then
@@ -4350,7 +4204,6 @@ local function buildCustomize()
 				Durations = CONFIG.Durations,
 				Easing = CONFIG.Easing,
 				Layout = CONFIG.Layout,
-				Quality = { Level = CONFIG.Quality.Level, FpsLow = CONFIG.Quality.FpsLow, FpsHigh = CONFIG.Quality.FpsHigh, RecheckInterval = CONFIG.Quality.RecheckInterval },
 			}
 			local ok, json = pcall(function()
 				return HttpService:JSONEncode(payload)
@@ -4522,7 +4375,7 @@ toggleDebug = function()
 				DebugState.instClock = 0
 				DebugState.instances = Gui and #Gui:GetDescendants() or 0
 			end
-			lines.Text = string.format("fps %d   ms %.1f\ninstances %d\nquality %s  scale %.2f", DebugState.fps, ms, DebugState.instances, QUALITY.Name, QUALITY.DurationScale)
+			lines.Text = string.format("fps %d   ms %.1f\ninstances %d", DebugState.fps, ms, DebugState.instances)
 		end)
 	elseif DebugState.conn then
 		pcall(function()
@@ -4549,7 +4402,7 @@ local function buildDebug()
 	new("UIPadding", { PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, DebugFrame)
 	makeLabel({
 		Name = "Lines",
-		Text = "fps 0   ms 0.0\ninstances 0\nquality " .. QUALITY.Name,
+		Text = "fps 0   ms 0.0\ninstances 0",
 		Tier = "Secondary",
 		TextRole = "Caption",
 		Size = UDim2.fromScale(1, 1),
@@ -5011,153 +4864,6 @@ local function handleInput(input)
 	end
 end
 
-local SAVED_QUALITY = "Medium"
-
-local function qualityRank(name)
-	if name == "Low" then
-		return 1
-	elseif name == "High" then
-		return 3
-	end
-	return 2
-end
-
-local function fpsLevel(fps)
-	if fps < (tonumber(CONFIG.Quality.FpsLow) or 30) then
-		return "Low"
-	elseif fps < (tonumber(CONFIG.Quality.FpsHigh) or 50) then
-		return "Medium"
-	end
-	return "High"
-end
-
-local function chooseQuality(fps)
-	local measured = fpsLevel(fps)
-	if qualityRank(measured) < qualityRank(SAVED_QUALITY) then
-		return measured
-	end
-	return SAVED_QUALITY
-end
-
-local function applyQuality(name)
-	local preset = CONFIG.Quality[name] or CONFIG.Quality.Medium
-	QUALITY = {
-		Name = name,
-		Shimmer = preset.Shimmer,
-		Blur = preset.Blur,
-		Instant = preset.Instant == true,
-		DurationScale = preset.DurationScale,
-		ScalePop = preset.ScalePop == true,
-	}
-end
-
-local function detectQuality()
-	local level = CONFIG.Quality.Level
-	local name
-	local measuredFps = 0
-	if CONFIG.Quality.Auto and level == "Auto" then
-		local saved = 5
-		pcall(function()
-			local level = UserSettings():GetService("UserGameSettings").SavedQualityLevel
-			if typeof(level) == "EnumItem" then
-				level = level.Value
-			end
-			if type(level) == "number" then
-				saved = level
-			end
-		end)
-		if saved <= 4 then
-			SAVED_QUALITY = "Low"
-		elseif saved <= 7 then
-			SAVED_QUALITY = "Medium"
-		else
-			SAVED_QUALITY = "High"
-		end
-		local warm = math.floor(clampNum(tonumber(CONFIG.Quality.WarmupFrames) or 8, 0, 60))
-		local target = math.floor(clampNum(tonumber(CONFIG.Quality.SampleFrames) or 30, 4, 240))
-		local total = 0
-		local count = 0
-		local seen = 0
-		local conn
-		conn = RunService.RenderStepped:Connect(function(dt)
-			if dt <= 0 or dt >= 1 then
-				return
-			end
-			if seen < warm then
-				seen = seen + 1
-				return
-			end
-			total = total + dt
-			count = count + 1
-			if count >= target then
-				conn:Disconnect()
-			end
-		end)
-		trackConn(conn)
-		local started = os.clock()
-		while count < target and os.clock() - started < 0.5 do
-			task.wait(0.01)
-		end
-		if count > 0 then
-			measuredFps = count / math.max(total, 0.001)
-		end
-		name = chooseQuality(measuredFps)
-		print("Blossom quality " .. name .. "  measured " .. string.format("%.0f", measuredFps) .. " fps  saved ceiling " .. SAVED_QUALITY)
-	else
-		name = level
-		if name == "Auto" then
-			name = "Medium"
-		end
-		SAVED_QUALITY = name
-	end
-	applyQuality(name)
-end
-
-local function startQualityMonitor()
-	if not CONFIG.Quality.Auto or CONFIG.Quality.Level ~= "Auto" then
-		return
-	end
-	task.spawn(function()
-		while not DESTROYED do
-			local interval = tonumber(CONFIG.Quality.RecheckInterval) or 0
-			if interval <= 0 then
-				return
-			end
-			task.wait(math.max(2, interval))
-			if DESTROYED then
-				return
-			end
-			local frames = 0
-			local total = 0
-			local conn = RunService.RenderStepped:Connect(function(dt)
-				if dt <= 0 or dt >= 1 then
-					return
-				end
-				frames = frames + 1
-				total = total + dt
-			end)
-			task.wait(1)
-			pcall(function()
-				conn:Disconnect()
-			end)
-			if not DESTROYED and frames >= 8 then
-				local fps = frames / math.max(total, 0.001)
-				local target = chooseQuality(fps)
-				if target ~= QUALITY.Name then
-					local upgrade = qualityRank(target) > qualityRank(QUALITY.Name)
-					local boundary = (target == "High") and (tonumber(CONFIG.Quality.FpsHigh) or 50) or (tonumber(CONFIG.Quality.FpsLow) or 30)
-					local margin = tonumber(CONFIG.Quality.UpgradeMargin) or 3
-					if not upgrade or fps >= boundary + margin then
-						applyQuality(target)
-						manageBlur()
-						print("Blossom quality " .. target .. "  average " .. string.format("%.0f", fps) .. " fps")
-					end
-				end
-			end
-		end
-	end)
-end
-
 local function activeSkinName()
 	if PLAYER then
 		local stored = PLAYER:GetAttribute("BlossomSkin")
@@ -5304,7 +5010,6 @@ local function main()
 	end
 	destroyGuiCopies()
 	_G["BlossomDestroy"] = destroyAll
-	detectQuality()
 	loadCustomSkins()
 	local skinName = activeSkinName()
 	CURRENT_THEME = copyTable(SKINS[skinName] or SKINS["Sakura"])
@@ -5358,7 +5063,6 @@ local function main()
 			end
 		end)
 	end
-	startQualityMonitor()
 end
 
 destroyAll = function()
@@ -5389,6 +5093,7 @@ destroyAll = function()
 		end)
 	end
 	table.clear(STAGE_CONNS)
+	cancelList(PETAL_TWEENS)
 	table.clear(REFRESH)
 	if Blur then
 		pcall(function()
