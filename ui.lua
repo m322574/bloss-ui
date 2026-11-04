@@ -3400,8 +3400,35 @@ local function buildMain()
 		trackConn(drag.conn)
 	end
 
-	local function beginDrag(input)
-		if drag.active or DESTROYED then
+	local function finishDrag()
+		if not drag.active then
+			return
+		end
+		drag.active = false
+		if drag.target then
+			drag.target = clampCenter(drag.target)
+		end
+		if MainShadow then
+			uiTween(MainShadow, { BackgroundTransparency = 0.68 }, CONFIG.Durations.Hover * 1.6, "Quad", "Out")
+		end
+	end
+
+	local function pushDrag(input)
+		if not drag.active or not drag.center or not drag.start or not input then
+			return
+		end
+		if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		local pos = input.Position
+		if not pos then
+			return
+		end
+		drag.target = clampCenter(drag.center + (Vector2.new(pos.X, pos.Y) - drag.start))
+	end
+
+	local function beginDrag(input, fromHandle)
+		if DESTROYED or not input then
 			return
 		end
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
@@ -3417,14 +3444,18 @@ local function buildMain()
 		if Customize and Customize.Visible then
 			return
 		end
-		if overClose(pos) or not overWindow(pos) then
+		local point = Vector2.new(pos.X, pos.Y)
+		if overClose(point) then
 			return
 		end
-		if blockedAt(pos) then
+		if not fromHandle and (not overWindow(point) or blockedAt(point)) then
 			return
+		end
+		if drag.active then
+			finishDrag()
 		end
 		drag.active = true
-		drag.start = pos
+		drag.start = point
 		local ap = MainColumn.AbsolutePosition
 		local as = MainColumn.AbsoluteSize
 		drag.center = Vector2.new(ap.X + as.X * 0.5, ap.Y + as.Y * 0.5)
@@ -3436,31 +3467,22 @@ local function buildMain()
 			uiTween(MainShadow, { BackgroundTransparency = 0.58 }, CONFIG.Durations.Hover * 1.6, "Quad", "Out")
 		end
 	end
-	trackConn(UserInputService.InputBegan:Connect(beginDrag))
-	trackConn(UserInputService.InputChanged:Connect(function(input)
-		if not drag.active or not drag.center or not drag.start then
-			return
-		end
-		if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
-			return
-		end
-		drag.target = clampCenter(drag.center + (input.Position - drag.start))
+	trackConn(UserInputService.InputBegan:Connect(function(input)
+		beginDrag(input, false)
 	end))
+	trackConn(UserInputService.InputChanged:Connect(pushDrag))
+	trackConn(UserInputService.TouchMoved:Connect(pushDrag))
 	trackConn(UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
 			return
 		end
-		if not drag.active then
-			return
-		end
-		drag.active = false
-		if drag.target then
-			drag.target = clampCenter(drag.target)
-		end
-		if MainShadow then
-			uiTween(MainShadow, { BackgroundTransparency = 0.68 }, CONFIG.Durations.Hover * 1.6, "Quad", "Out")
-		end
+		finishDrag()
 	end))
+	titlebar.Active = true
+	trackConn(titlebar.InputBegan:Connect(function(input)
+		beginDrag(input, true)
+	end))
+	trackConn(titlebar.InputChanged:Connect(pushDrag))
 
 	SidebarPanel = new("Frame", {
 		Name = "Sidebar",
