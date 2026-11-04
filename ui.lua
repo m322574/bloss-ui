@@ -71,11 +71,11 @@ local CONFIG = {
 	GuiName = "Blossom",
 	AutoPlay = true,
 	StartupDelay = 0.25,
-	DestroyModifier = Enum.KeyCode.RightShift,
+	DestroyModifier = Enum.KeyCode.LeftShift,
 	DestroyKey = Enum.KeyCode.Delete,
 	DebugKey = Enum.KeyCode.F1,
 	ScreenshotKey = Enum.KeyCode.F12,
-	HideKey = Enum.KeyCode.H,
+	HideKey = Enum.KeyCode.RightShift,
 	Grid = 4,
 	Brand = {
 		Name = "Blossom",
@@ -95,16 +95,16 @@ local CONFIG = {
 		ButtonHeight = 32,
 		RowHeight = 40,
 		InputHeight = 36,
-		MinScale = 0.55,
+		MinScale = 0.6,
 	},
 	Theme = {
 		Name = "Obsidian",
 		Mode = "dark",
-		Accent = "#5BE3B4",
-		Base = "#0B0D11",
-		PanelTransparency = 0.02,
+		Accent = "#F072A8",
+		Base = "#0E1116",
+		PanelTransparency = 0,
 		CardTransparency = 0,
-		StrokeTransparency = 0.88,
+		StrokeTransparency = 0.9,
 		StrokeThickness = 1,
 		GradientTop = "#FFFFFF",
 		GradientTopTransparency = 0.94,
@@ -114,8 +114,8 @@ local CONFIG = {
 		TextDisabled = "#545C69",
 		DimColor = "#05070A",
 		DimTransparency = 0.38,
-		ProgressTrack = "#1B2129",
-		ProgressFill = "#5BE3B4",
+		ProgressTrack = "#2A1C24",
+		ProgressFill = "#F072A8",
 		SkeletonBase = "#171C24",
 		SkeletonHighlight = "#232A34",
 		ShimmerTransparency = 0.3,
@@ -128,17 +128,17 @@ local CONFIG = {
 		TextureImage = "",
 		BlurEnabled = true,
 		BlurSize = 12,
-		SidebarColor = "#070809",
-		CardColor = "#14181F",
-		DividerColor = "#1F252E",
-		BannerA = "#0C3F87",
-		BannerB = "#12A38F",
-		BannerC = "#060C16",
+		SidebarColor = "#0A0C10",
+		CardColor = "#15191F",
+		DividerColor = "#22272F",
+		BannerA = "#5A1233",
+		BannerB = "#F072A8",
+		BannerC = "#12070E",
 	},
 	Durations = {
 		Scale = 1,
 		PreloadTimeout = 6,
-		Splash = 1.6,
+		Splash = 1.5,
 		SplashHold = 0.5,
 		Transition = 0.55,
 		Slide = 0.4,
@@ -175,8 +175,8 @@ local CONFIG = {
 		Level = "Auto",
 		FpsLow = 30,
 		FpsHigh = 50,
-		SampleFrames = 30,
-		WarmupFrames = 8,
+		SampleFrames = 16,
+		WarmupFrames = 6,
 		RecheckInterval = 8,
 		UpgradeMargin = 3,
 		Low = { Shimmer = false, Blur = false, Instant = true, DurationScale = 0.8, ScalePop = false },
@@ -196,18 +196,27 @@ local CONFIG = {
 	Screenshot = {
 		FlashDuration = 0.2,
 	},
+	Ambient = {
+		Petals = true,
+		Count = 8,
+		Speed = 62,
+	},
 	Loading = {
-		BackdropColor = "#08090C",
+		BackdropColor = "#0B0609",
 		BackdropTransparency = 0.01,
-		LogoMode = "Image",
-		LogoImageId = ASSETS.LoaderLogo,
-		LogoSize = 96,
-		LogoOffsetY = -104,
+		PetalColor = "#F49BC0",
+		PetalCount = 14,
+		TitleColor = "#FCEFF4",
+		SubColor = "#C79BAC",
+		LogoMode = "Mark",
+		LogoImageId = "",
+		LogoSize = 64,
+		LogoOffsetY = 0,
 		LogoSpin = 1.6,
 		LogoPulse = 1.1,
 		LogoFloat = 1.8,
-		LogoColor = "#5BE3B4",
-		LogoCoreColor = "#EEF2F7",
+		LogoColor = "#F49BC0",
+		LogoCoreColor = "#FFF6FA",
 	},
 }
 
@@ -218,7 +227,7 @@ local SKINS = {
 		Mode = "light",
 		Accent = "#0E8C6D",
 		Base = "#F3F5F9",
-		PanelTransparency = 0.02,
+		PanelTransparency = 0,
 		CardTransparency = 0,
 		StrokeTransparency = 0.72,
 		StrokeThickness = 1,
@@ -256,9 +265,9 @@ local SKINS = {
 		Mode = "dark",
 		Accent = "#FF9A5A",
 		Base = "#100D0B",
-		PanelTransparency = 0.02,
+		PanelTransparency = 0,
 		CardTransparency = 0,
-		StrokeTransparency = 0.88,
+		StrokeTransparency = 0.9,
 		StrokeThickness = 1,
 		GradientTop = "#FFFFFF",
 		GradientTopTransparency = 0.94,
@@ -294,7 +303,7 @@ local SKINS = {
 		Mode = "light",
 		Accent = "#D6568C",
 		Base = "#FBF3F6",
-		PanelTransparency = 0.02,
+		PanelTransparency = 0,
 		CardTransparency = 0,
 		StrokeTransparency = 0.74,
 		StrokeThickness = 1,
@@ -324,7 +333,7 @@ local SKINS = {
 		CardColor = "#FFFFFF",
 		DividerColor = "#EFDCE5",
 		BannerA = "#F3C3D8",
-		BannerB = "#DCC6F0",
+		BannerB = "#F7C0D6",
 		BannerC = "#FBF3F6",
 	},
 	["Midnight"] = {
@@ -332,9 +341,9 @@ local SKINS = {
 		Mode = "dark",
 		Accent = "#7C8CFF",
 		Base = "#080A14",
-		PanelTransparency = 0.02,
+		PanelTransparency = 0,
 		CardTransparency = 0,
-		StrokeTransparency = 0.88,
+		StrokeTransparency = 0.9,
 		StrokeThickness = 1,
 		GradientTop = "#FFFFFF",
 		GradientTopTransparency = 0.94,
@@ -370,7 +379,7 @@ local SKINS = {
 		Mode = "light",
 		Accent = "#0F7FA8",
 		Base = "#EFF6FA",
-		PanelTransparency = 0.02,
+		PanelTransparency = 0,
 		CardTransparency = 0,
 		StrokeTransparency = 0.76,
 		StrokeThickness = 1,
@@ -408,9 +417,9 @@ local SKINS = {
 		Mode = "dark",
 		Accent = "#8BD16B",
 		Base = "#0A0F0B",
-		PanelTransparency = 0.02,
+		PanelTransparency = 0,
 		CardTransparency = 0,
-		StrokeTransparency = 0.88,
+		StrokeTransparency = 0.9,
 		StrokeThickness = 1,
 		GradientTop = "#FFFFFF",
 		GradientTopTransparency = 0.94,
@@ -446,7 +455,7 @@ local SKINS = {
 		Mode = "light",
 		Accent = "#A9713F",
 		Base = "#F7F1E7",
-		PanelTransparency = 0.02,
+		PanelTransparency = 0,
 		CardTransparency = 0,
 		StrokeTransparency = 0.72,
 		StrokeThickness = 1,
@@ -481,7 +490,7 @@ local SKINS = {
 	},
 }
 
-local SKIN_ORDER = { "Obsidian", "Porcelain", "Ember", "Sakura", "Midnight", "Ice", "Moss", "Sandstone" }
+local SKIN_ORDER = { "Sakura", "Obsidian", "Porcelain", "Ember", "Midnight", "Ice", "Moss", "Sandstone" }
 
 local BUILTIN_SKINS = {}
 for _, skinName in ipairs(SKIN_ORDER) do
@@ -595,12 +604,6 @@ local SCHEMA = {
 	{ key = "TextureImage", type = "image" },
 	{ key = "BlurEnabled", type = "bool" },
 	{ key = "BlurSize", type = "number", min = 0, max = 40 },
-	{ key = "SidebarColor", type = "color" },
-	{ key = "CardColor", type = "color" },
-	{ key = "DividerColor", type = "color" },
-	{ key = "BannerA", type = "color" },
-	{ key = "BannerB", type = "color" },
-	{ key = "BannerC", type = "color" },
 }
 
 local EASING_NAMES = { "Linear", "Quad", "Cubic", "Quart", "Quint", "Sine", "Exponential", "Circular", "Back", "Bounce", "Elastic" }
@@ -609,7 +612,7 @@ local DIR_NAMES = { "In", "Out", "InOut" }
 local EASING_STYLES = {
 	Linear = Enum.EasingStyle.Linear,
 	Quad = Enum.EasingStyle.Quad,
-	Cubic = Enum.EasingStyle.Quart,
+	Cubic = Enum.EasingStyle.Cubic,
 	Quart = Enum.EasingStyle.Quart,
 	Quint = Enum.EasingStyle.Quint,
 	Sine = Enum.EasingStyle.Sine,
@@ -743,11 +746,7 @@ local CONNS = {}
 local TWEENS = {}
 local STAGE_TWEENS = {}
 local STAGE_CONNS = {}
-local DebugConn = nil
-local DebugVisible = false
-local DebugClock = 0
-local DebugFrames = 0
-local DebugFps = 0
+local DebugState = { conn = nil, visible = false, clock = 0, frames = 0, fps = 0, instances = nil, instClock = 0 }
 local GalleryState = { speed = 1, loop = false, countdown = true }
 local AutoExecute = false
 
@@ -900,14 +899,32 @@ local function new(class, props, parent)
 	return inst
 end
 
+local ThemeCache = {
+	list = nil,
+	fonts = {},
+	animated = {
+		Panel = true,
+		Sidebar = true,
+		Card = true,
+		Surface = true,
+		Backdrop = true,
+		Input = true,
+		Button = true,
+	},
+}
+
 local function themeFont()
-	local ok, f = pcall(function()
-		return Enum.Font[CURRENT_THEME.Font]
-	end)
-	if ok and f then
-		return f
+	local name = tostring(CURRENT_THEME.Font or "")
+	local cached = ThemeCache.fonts[name]
+	if cached then
+		return cached
 	end
-	return Enum.Font.GothamMedium
+	local ok, f = pcall(function()
+		return Enum.Font[name]
+	end)
+	f = (ok and f) or Enum.Font.GothamMedium
+	ThemeCache.fonts[name] = f
+	return f
 end
 
 local function boldFont()
@@ -957,7 +974,7 @@ local function recomputeColors(th)
 		textPrimary = hexToColor(th.TextPrimary),
 		textSecondary = hexToColor(th.TextSecondary),
 		textDisabled = hexToColor(th.TextDisabled),
-		onAccent = th.Mode == "dark" and Color3.fromRGB(6, 12, 10) or Color3.new(1, 1, 1),
+		onAccent = th.Mode == "dark" and Color3.fromRGB(28, 8, 18) or Color3.new(1, 1, 1),
 		dim = hexToColor(th.DimColor),
 		track = hexToColor(th.ProgressTrack),
 		fill = hexToColor(th.ProgressFill),
@@ -1293,25 +1310,29 @@ local function loadCustomSkins()
 	PLAYER:SetAttribute("BlossomThemes", raw)
 end
 
-local function strokeApply(stroke, role)
-	local th = CURRENT_THEME
+local function strokeSpec(role)
+	local t = CURRENT_THEME
 	if role == "Accent" then
-		stroke.Color = TC.accent
-		stroke.Transparency = 0.35
+		return TC.accent, 0.35
 	elseif role == "Focus" then
-		stroke.Color = TC.accent
-		stroke.Transparency = 0.12
+		return TC.accent, 0.12
 	elseif role == "Selected" then
-		stroke.Color = TC.accent
-		stroke.Transparency = 0.4
+		return TC.accent, 0.4
 	elseif role == "Plain" then
-		stroke.Color = TC.base
-		stroke.Transparency = th.PanelTransparency
-	else
-		stroke.Color = Color3.new(1, 1, 1)
-		stroke.Transparency = th.StrokeTransparency
+		return TC.divider, 0.6
+	elseif role == "CardEdge" then
+		return TC.textPrimary, math.min(1, t.StrokeTransparency + 0.04)
+	elseif role == "Soft" then
+		return TC.textPrimary, math.min(1, t.StrokeTransparency + 0.03)
 	end
-	stroke.Thickness = math.max(1, th.StrokeThickness)
+	return TC.textPrimary, t.StrokeTransparency
+end
+
+local function strokeApply(stroke, role)
+	local color, alpha = strokeSpec(role)
+	stroke.Color = color
+	stroke.Transparency = alpha
+	stroke.Thickness = math.max(1, CURRENT_THEME.StrokeThickness)
 end
 
 local function gradientApply(grad, role)
@@ -1344,6 +1365,18 @@ local function gradientApply(grad, role)
 			NumberSequenceKeypoint.new(1, 0.98),
 		})
 		grad.Rotation = 90
+	elseif role == "Header" then
+		grad.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, TC.accent),
+			ColorSequenceKeypoint.new(0.55, TC.bannerA),
+			ColorSequenceKeypoint.new(1, TC.base),
+		})
+		grad.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.82),
+			NumberSequenceKeypoint.new(0.5, 0.95),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		grad.Rotation = 12
 	elseif role == "Shimmer" then
 		grad.Color = ColorSequence.new(TC.shimmer)
 		grad.Transparency = NumberSequence.new({
@@ -1366,26 +1399,13 @@ end
 local manageBlur
 
 local function strokeColorFor(role)
-	if role == "Accent" or role == "Focus" or role == "Selected" then
-		return TC.accent
-	elseif role == "Plain" then
-		return TC.base
-	end
-	return Color3.new(1, 1, 1)
+	local color = strokeSpec(role)
+	return color
 end
 
 local function strokeTransparencyFor(role)
-	local t = CURRENT_THEME
-	if role == "Accent" then
-		return 0.35
-	elseif role == "Focus" then
-		return 0.12
-	elseif role == "Selected" then
-		return 0.4
-	elseif role == "Plain" then
-		return t.PanelTransparency
-	end
-	return t.StrokeTransparency
+	local _, alpha = strokeSpec(role)
+	return alpha
 end
 
 local function sameValue(a, b)
@@ -1409,7 +1429,7 @@ local function applyTheme(th, animated)
 	end
 	local infoUse = ti(dur(CONFIG.Durations.ThemeCrossfade), CONFIG.Easing.Theme, CONFIG.Easing.ThemeDir)
 	local function set(inst, prop, value)
-		if animated then
+		if animated and ThemeCache.animated[inst:GetAttribute("Role")] then
 			local fetched, current = pcall(function()
 				return inst[prop]
 			end)
@@ -1418,26 +1438,26 @@ local function applyTheme(th, animated)
 			end
 			playTween(inst, infoUse, { [prop] = value }, THEME_TWEENS)
 		else
-			pcall(function()
-				inst[prop] = value
-			end)
+			inst[prop] = value
 		end
 	end
 	local function setNow(inst, prop, value)
-		pcall(function()
-			inst[prop] = value
-		end)
+		inst[prop] = value
 	end
 	local t = CURRENT_THEME
-	for _, d in ipairs(Gui:GetDescendants()) do
+	local function styleAll()
+	local list = ThemeCache.list
+	if not list then
+		if not Gui then
+			return
+		end
+		list = Gui:GetDescendants()
+		ThemeCache.list = list
+	end
+	for _, d in ipairs(list) do
 		local role = d:GetAttribute("Role")
 		if d:IsA("UIStroke") then
-			if animated then
-				local tmp = { Color = strokeColorFor(role), Transparency = strokeTransparencyFor(role), Thickness = math.max(1, t.StrokeThickness) }
-				playTween(d, infoUse, tmp, THEME_TWEENS)
-			else
-				strokeApply(d, role)
-			end
+			strokeApply(d, role)
 		elseif d:IsA("UIGradient") then
 			gradientApply(d, role)
 		elseif d:IsA("UICorner") then
@@ -1550,6 +1570,8 @@ local function applyTheme(th, animated)
 			end
 		end
 	end
+	end
+	pcall(styleAll)
 	manageBlur()
 	refreshAll()
 end
@@ -1562,7 +1584,8 @@ local LogoFloatTween
 
 manageBlur = function()
 	local t = CURRENT_THEME
-	local want = QUALITY.Blur and t.BlurEnabled and LoadingActive
+	local seeThrough = (tonumber(CONFIG.Loading.BackdropTransparency) or 0) > 0.45
+	local want = QUALITY.Blur and t.BlurEnabled and LoadingActive and seeThrough
 	if want then
 		if not Blur then
 			Blur = new("BlurEffect", { Name = "BlossomBlur", Size = 0, Enabled = true }, Lighting)
@@ -1642,7 +1665,7 @@ local function updateRootScale()
 		return
 	end
 	local vp = viewportSize()
-	local s = math.min(vp.X / 600, vp.Y / 460)
+	local s = math.min(vp.X / 760, vp.Y / 520)
 	RootScale.Scale = clampNum(s, CONFIG.Layout.MinScale, 1)
 end
 
@@ -1669,7 +1692,7 @@ local function makeLabel(props, parent)
 		Text = p.Text or "",
 		Font = themeFont(),
 		TextSize = size,
-		TextColor3 = tierColor(tier),
+		TextColor3 = p.Color or tierColor(tier),
 		TextXAlignment = p.TextXAlignment or Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Center,
 		TextWrapped = p.TextWrapped == true,
@@ -1729,10 +1752,10 @@ local function makeCard(parent, opts)
 		Size = opts.Size or UDim2.new(1, 0, 0, 0),
 		AutomaticSize = opts.Fixed and Enum.AutomaticSize.None or Enum.AutomaticSize.Y,
 		LayoutOrder = opts.Order or 0,
-		ClipsDescendants = true,
 		Role = "Card",
 	}, parent)
 	new("UICorner", { CornerRadius = UDim.new(0, L.SmallCornerRadius), Role = "Small" }, card)
+	new("UIStroke", { Color = TC.textPrimary, Transparency = CURRENT_THEME.StrokeTransparency + 0.04, Thickness = 1, Role = "CardEdge", ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, card)
 	new("UIPadding", {
 		PaddingTop = UDim.new(0, 6),
 		PaddingBottom = UDim.new(0, 6),
@@ -1791,7 +1814,6 @@ local function makeButton(parent, opts)
 		TextRole = "Body",
 	}, parent)
 	new("UICorner", { CornerRadius = UDim.new(0, radius), Role = "Small" }, btn)
-	local scale = QUALITY.ScalePop and new("UIScale", { Scale = 1 }, btn) or nil
 	local state = { enabled = opts.Enabled ~= false, hover = false, pressed = false, active = opts.Active == true }
 
 	local function faceColor()
@@ -1844,20 +1866,12 @@ local function makeButton(parent, opts)
 		uiTween(btn, { BackgroundColor3 = faceColor(), BackgroundTransparency = faceAlpha() }, duration, style, dir)
 	end
 
-	local function paintScale(duration, style, dir)
-		if not scale then
-			return
-		end
-		uiTween(scale, { Scale = state.pressed and 0.972 or (state.hover and 1.012 or 1) }, duration, style, dir)
-	end
-
 	trackConn(btn.MouseEnter:Connect(function()
 		if not state.enabled or state.hover then
 			return
 		end
 		state.hover = true
 		paint(hoverTime(true), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
-		paintScale(hoverTime(true), "Quad", "Out")
 	end))
 	trackConn(btn.MouseLeave:Connect(function()
 		if not state.hover and not state.pressed then
@@ -1866,7 +1880,6 @@ local function makeButton(parent, opts)
 		state.hover = false
 		state.pressed = false
 		paint(hoverTime(false), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
-		paintScale(hoverTime(false), "Quad", "Out")
 	end))
 	trackConn(btn.MouseButton1Down:Connect(function()
 		if not state.enabled or state.pressed then
@@ -1874,7 +1887,6 @@ local function makeButton(parent, opts)
 		end
 		state.pressed = true
 		paint(CONFIG.Durations.Press * 0.6, CONFIG.Easing.Press, CONFIG.Easing.PressDir)
-		paintScale(CONFIG.Durations.Press * 0.6, "Quad", "Out")
 	end))
 	trackConn(btn.MouseButton1Up:Connect(function()
 		if not state.pressed then
@@ -1882,7 +1894,6 @@ local function makeButton(parent, opts)
 		end
 		state.pressed = false
 		paint(hoverTime(true), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
-		paintScale(hoverTime(false), "Back", "Out")
 	end))
 
 	if opts.Divider then
@@ -1911,74 +1922,102 @@ local function makeButton(parent, opts)
 	return comp
 end
 
+local KNOB_OFF_X = 2
+local KNOB_ON_X = 18
+
 local function makeToggle(parent, opts)
 	opts = opts or {}
-	local L = CONFIG.Layout
 	local height = tonumber(opts.Height) or 42
-	local row = new("Frame", {
+	local row = new("TextButton", {
 		Name = "Toggle",
+		AutoButtonColor = false,
+		Selectable = true,
+		Text = "",
 		BackgroundColor3 = TC.button,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		Size = opts.Size or UDim2.new(1, 0, 0, height),
 		LayoutOrder = opts.Order or 0,
 		Role = "Ghost",
+		ZIndex = 2,
 	}, parent)
-	local text = makeLabel({
+	new("UICorner", { CornerRadius = UDim.new(0, 6), Role = "Small" }, row)
+	makeLabel({
 		Name = "Label",
 		Text = sanitizeString(tostring(opts.Text or "Toggle"), 60),
 		Tier = "Primary",
 		TextRole = "Body",
 		Position = UDim2.new(0, 10, 0, 0),
-		Size = UDim2.new(1, -72, 1, 0),
+		Size = UDim2.new(1, -62, 1, 0),
 		Truncate = true,
+		ZIndex = 3,
 	}, row)
 	local pill = new("Frame", {
-		Name = "Pill",
+		Name = "Switch",
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -10, 0.5, 0),
-		Size = UDim2.new(0, 36, 0, 20),
+		Size = UDim2.new(0, 34, 0, 18),
 		BackgroundColor3 = TC.track,
 		BorderSizePixel = 0,
-		Role = "Track",
+		ZIndex = 3,
 	}, row)
 	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, pill)
+	new("UIStroke", { Color = TC.textPrimary, Transparency = 0.88, Thickness = 1, Role = "Soft", ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, pill)
 	local knob = new("Frame", {
 		Name = "Knob",
 		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 3, 0.5, 0),
+		Position = UDim2.new(0, KNOB_OFF_X, 0.5, 0),
 		Size = UDim2.new(0, 14, 0, 14),
 		BackgroundColor3 = TC.textSecondary,
 		BorderSizePixel = 0,
-		Role = "Knob",
+		ZIndex = 4,
 	}, pill)
 	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, knob)
 
-	local state = { value = opts.Value == true, hover = false }
+	local state = { value = opts.Value == true, hover = false, enabled = opts.Enabled ~= false }
+
+	local function trackColor()
+		if not state.enabled then
+			return TC.track
+		end
+		return state.value and TC.accent or TC.track
+	end
+
+	local function knobColor()
+		if not state.enabled then
+			return TC.textDisabled
+		end
+		return state.value and Color3.new(1, 1, 1) or TC.textSecondary
+	end
+
+	local function knobPos()
+		return UDim2.new(0, state.value and KNOB_ON_X or KNOB_OFF_X, 0.5, 0)
+	end
 
 	local function paint(animated)
-		pill:SetAttribute("On", state.value)
-		local knobPos = state.value and UDim2.new(0, 19, 0.5, 0) or UDim2.new(0, 3, 0.5, 0)
-		if animated ~= false then
-			uiTween(pill, { BackgroundColor3 = state.value and TC.accent or TC.track }, CONFIG.Durations.Toggle, CONFIG.Easing.Pop, CONFIG.Easing.PopDir)
-			uiTween(knob, { Position = knobPos, BackgroundColor3 = state.value and TC.onAccent or TC.textSecondary }, CONFIG.Durations.Toggle, CONFIG.Easing.Pop, CONFIG.Easing.PopDir)
-		else
-			pill.BackgroundColor3 = state.value and TC.accent or TC.track
-			knob.Position = knobPos
-			knob.BackgroundColor3 = state.value and TC.onAccent or TC.textSecondary
+		if animated == false or QUALITY.Instant then
+			pill.BackgroundColor3 = trackColor()
+			knob.BackgroundColor3 = knobColor()
+			knob.Position = knobPos()
+			return
 		end
+		uiTween(pill, { BackgroundColor3 = trackColor() }, CONFIG.Durations.Toggle, "Quad", "Out")
+		uiTween(knob, { BackgroundColor3 = knobColor() }, CONFIG.Durations.Toggle, "Quad", "Out")
+		uiTween(knob, { Position = knobPos() }, CONFIG.Durations.Toggle, "Quint", "Out")
 	end
 
 	local function refresh()
-		pill:SetAttribute("On", state.value)
-		pill.BackgroundColor3 = state.value and TC.accent or TC.track
-		knob.BackgroundColor3 = state.value and TC.onAccent or TC.textSecondary
-		knob.Position = state.value and UDim2.new(0, 19, 0.5, 0) or UDim2.new(0, 3, 0.5, 0)
+		pill.BackgroundColor3 = trackColor()
+		knob.BackgroundColor3 = knobColor()
+		knob.Position = knobPos()
 		row.BackgroundColor3 = TC.button
-		row.BackgroundTransparency = state.hover and 0.9 or 1
+		row.BackgroundTransparency = state.hover and 0.94 or 1
 	end
 
 	local function flip()
+		if not state.enabled then
+			return
+		end
 		state.value = not state.value
 		paint(true)
 		if opts.OnChange then
@@ -1986,23 +2025,10 @@ local function makeToggle(parent, opts)
 		end
 	end
 
-	local function accept(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			flip()
-		end
-	end
-
-	trackConn(pill.InputBegan:Connect(accept))
-	trackConn(text.InputBegan:Connect(accept))
-	trackConn(row.InputBegan:Connect(function(input)
-		if input.Target ~= row then
-			return
-		end
-		accept(input)
-	end))
+	trackConn(row.MouseButton1Click:Connect(flip))
 	trackConn(row.MouseEnter:Connect(function()
 		state.hover = true
-		hoverTween(row, { BackgroundTransparency = 0.9 }, true)
+		hoverTween(row, { BackgroundTransparency = 0.94 }, true)
 	end))
 	trackConn(row.MouseLeave:Connect(function()
 		state.hover = false
@@ -2022,6 +2048,11 @@ local function makeToggle(parent, opts)
 
 	function comp:Get()
 		return state.value
+	end
+
+	function comp:SetEnabled(value)
+		state.enabled = value == true
+		paint(false)
 	end
 
 	table.insert(REFRESH, refresh)
@@ -2161,7 +2192,7 @@ local function makeTextInput(parent, opts)
 	end))
 	trackConn(box.FocusLost:Connect(function(enter)
 		playTween(stroke, ti(mdur(hoverTime(false)), "Quad", "Out"), {
-			Color = Color3.new(1, 1, 1),
+			Color = TC.textPrimary,
 			Transparency = CURRENT_THEME.StrokeTransparency,
 		})
 		if enter and opts.OnSubmit then
@@ -2421,6 +2452,7 @@ local function clearStage()
 	for _, child in ipairs(Stage:GetChildren()) do
 		child:Destroy()
 	end
+	ThemeCache.list = nil
 end
 
 local function later(seconds, fn)
@@ -2446,87 +2478,207 @@ local function stageGroup(width, height)
 	}, Stage)
 end
 
+local function petalRain()
+	if not Stage then
+		return
+	end
+	local vp = viewportSize()
+	local count = math.floor(clampNum(tonumber(CONFIG.Loading.PetalCount) or 0, 0, 32))
+	if count <= 0 or vp.X <= 0 or vp.Y <= 0 then
+		return
+	end
+	local petalColor = hexToColor(CONFIG.Loading.PetalColor or CONFIG.Loading.LogoColor)
+	for _ = 1, count do
+		local width = 7 + math.random() * 6
+		local height = width * 1.4
+		local x = math.random() * vp.X
+		local startY = -30 + math.random() * (vp.Y * 0.85)
+		local drift = (math.random() * 2 - 1) * 34
+		local travel = (vp.Y + 40) - startY
+		local fall = math.max(0.6, travel / (240 + math.random() * 140))
+		local spin = (math.random() * 2 - 1) * 190
+		local petal = new("Frame", {
+			Name = "Petal",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0, x, 0, startY),
+			Size = UDim2.new(0, width, 0, height),
+			BackgroundColor3 = petalColor,
+			BackgroundTransparency = 0.28 + math.random() * 0.3,
+			BorderSizePixel = 0,
+			ZIndex = 1,
+		}, Stage)
+		new("UICorner", { CornerRadius = UDim.new(0.5, 0), Role = "Dot" }, petal)
+		playTween(petal, ti(fall, "Linear", "Out"), {
+			Position = UDim2.new(0, x + drift, 0, vp.Y + 40),
+		}, STAGE_TWEENS)
+		playTween(petal, ti(fall, "Linear", "Out"), { Rotation = spin }, STAGE_TWEENS)
+	end
+end
+
+local function ambientPetals(parent, opts)
+	opts = opts or {}
+	local cfg = CONFIG.Ambient or {}
+	if not parent or isLowEnd() or cfg.Petals == false then
+		return
+	end
+	local vp = viewportSize()
+	local spanW = tonumber(opts.Width) or vp.X
+	local spanH = tonumber(opts.Height) or (vp.Y + 90)
+	local count = math.floor(clampNum(tonumber(opts.Count) or tonumber(cfg.Count) or 8, 0, 24))
+	if count <= 0 or spanW <= 0 or spanH <= 0 then
+		return
+	end
+	local fade = tonumber(opts.Transparency) or 0.35
+	local depth = tonumber(opts.ZIndex) or 1
+	local layer = new("Frame", {
+		Name = opts.Name or "Petals",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = depth,
+	}, parent)
+	local tint = hexToColor(CONFIG.Loading.PetalColor or CONFIG.Loading.LogoColor)
+	for i = 1, count do
+		local width = 6 + math.random() * 5
+		local height = width * 1.4
+		local lane = (i - 0.5) / count * spanW
+		local x = lane + (math.random() * 80 - 40)
+		local drift = (math.random() * 2 - 1) * 60
+		local speed = clampNum(tonumber(opts.Speed) or tonumber(cfg.Speed) or 62, 20, 200) + math.random() * 36
+		local fall = spanH / speed
+		local delayTime = math.random() * fall
+		local petal = new("Frame", {
+			Name = "Petal",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0, x, 0, -50),
+			Size = UDim2.new(0, width, 0, height),
+			Rotation = math.random() * 360,
+			BackgroundColor3 = tint,
+			BackgroundTransparency = fade + math.random() * 0.25,
+			BorderSizePixel = 0,
+			ZIndex = depth,
+		}, layer)
+		new("UICorner", { CornerRadius = UDim.new(0.5, 0), Role = "Dot" }, petal)
+		playTween(petal, ti(fall, "Linear", "Out", -1, false, delayTime), {
+			Position = UDim2.new(0, x + drift, 0, spanH - 50),
+		})
+		playTween(petal, ti(fall * 1.6, "Linear", "Out", -1, false, delayTime), {
+			Rotation = petal.Rotation + 220,
+		})
+	end
+end
+
 local function loaderSplash()
-	local w = fitWidth(340)
-	local g = stageGroup(w, 176)
+	local markSize = clampNum(tonumber(CONFIG.Loading.LogoSize) or 64, 32, 160)
+	local spinTime = math.max(0.35, tonumber(CONFIG.Loading.LogoSpin) or 1.6)
+	local titleY = markSize + 14
+	local subY = titleY + 26
+	local barY = subY + 26
+	local groupH = barY + 14
+	local w = fitWidth(math.max(260, math.min(320, markSize + 160)))
+	local g = stageGroup(w, groupH)
 	if not isLowEnd() then
-		g.Position = UDim2.new(0.5, 0, 0.5, 12)
+		g.Position = UDim2.new(0.5, 0, 0.5, 10)
 		playTween(g, ti(dur(CONFIG.Durations.Splash) * 0.4, "Quint", "Out"), { Position = UDim2.fromScale(0.5, 0.5) })
 	end
-	local logoSize = 56
-	local logoActive = LoadingLogo ~= nil
-	local textShift = logoActive and -40 or 0
-	if not logoActive and CURRENT_THEME.LogoImage ~= "" then
-		new("ImageLabel", {
-			Name = "Logo",
-			AnchorPoint = Vector2.new(0.5, 0),
-			Position = UDim2.new(0.5, 0, 0, 8),
-			Size = UDim2.new(0, logoSize, 0, logoSize),
-			BackgroundTransparency = 1,
-			Image = "rbxassetid://" .. CURRENT_THEME.LogoImage,
-			ScaleType = Enum.ScaleType.Fit,
-			ImageRole = "Logo",
-			ZIndex = 2,
-		}, g)
-	elseif not logoActive then
-		local badge = new("Frame", {
-			Name = "Badge",
-			AnchorPoint = Vector2.new(0.5, 0),
-			Position = UDim2.new(0.5, 0, 0, 8),
-			Size = UDim2.new(0, logoSize, 0, logoSize),
-			BackgroundColor3 = TC.accent,
+
+	local mark = new("Frame", {
+		Name = "Mark",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 2),
+		Size = UDim2.new(0, markSize, 0, markSize),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 3,
+	}, g)
+	local bloom = new("Frame", {
+		Name = "Bloom",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 3,
+	}, mark)
+	local petalTint = hexToColor(CONFIG.Loading.PetalColor or CONFIG.Loading.LogoColor)
+	local coreTint = hexToColor(CONFIG.Loading.LogoCoreColor)
+	for i = 1, 5 do
+		local angle = (i - 1) * math.pi * 2 / 5 - math.pi * 0.5
+		local petal = new("Frame", {
+			Name = "Petal",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5 + math.cos(angle) * 0.21, 0.5 + math.sin(angle) * 0.21),
+			Size = UDim2.new(0, markSize * 0.34, 0, markSize * 0.42),
+			Rotation = (i - 1) * 72,
+			BackgroundColor3 = petalTint,
 			BackgroundTransparency = 0.1,
 			BorderSizePixel = 0,
-			Role = "Accent",
-			ZIndex = 2,
-		}, g)
-		new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, badge)
-		new("UIStroke", { Color = Color3.new(1, 1, 1), Transparency = 0.86, Thickness = 1, Role = "Edge" }, badge)
-		new("UIGradient", {
-			Rotation = 90,
-			Color = ColorSequence.new(Color3.new(1, 1, 1)),
-			Transparency = NumberSequence.new({
-				NumberSequenceKeypoint.new(0, 0.72),
-				NumberSequenceKeypoint.new(1, 1),
-			}),
-			Role = "Glass",
-		}, badge)
-		new("Frame", {
-			Name = "Core",
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.5),
-			Size = UDim2.new(0, 18, 0, 18),
-			BackgroundColor3 = TC.onAccent,
-			BackgroundTransparency = 0.12,
-			BorderSizePixel = 0,
 			ZIndex = 3,
-		}, badge)
+		}, bloom)
+		new("UICorner", { CornerRadius = UDim.new(0.5, 0), Role = "Dot" }, petal)
 	end
+	local core = new("Frame", {
+		Name = "Core",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.new(0, markSize * 0.24, 0, markSize * 0.24),
+		BackgroundColor3 = coreTint,
+		BorderSizePixel = 0,
+		ZIndex = 4,
+	}, bloom)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, core)
+	playTween(bloom, ti(spinTime * 2, "Linear", "Out", -1), { Rotation = 360 }, STAGE_TWEENS)
+	petalRain()
+
 	makeLabel({
 		Name = "Title",
-		Text = "Blossom",
+		Text = sanitizeString(tostring(CONFIG.Brand.Name or "Blossom"), 24),
 		Tier = "Primary",
 		TextRole = "Title",
+		Color = hexToColor(CONFIG.Loading.TitleColor or "#FCEFF4"),
 		Bold = true,
 		FixedSize = true,
-		TextSize = 21,
-		Position = UDim2.new(0, 0, 0, 78 + textShift),
-		Size = UDim2.new(1, 0, 0, 28),
+		TextSize = 17,
+		Position = UDim2.new(0, 0, 0, titleY),
+		Size = UDim2.new(1, 0, 0, 24),
 		TextXAlignment = Enum.TextXAlignment.Center,
-		ZIndex = 2,
+		ZIndex = 3,
 	}, g)
 	makeLabel({
 		Name = "Sub",
-		Text = "loading experience",
+		Text = "loading",
 		Tier = "Secondary",
 		TextRole = "Caption",
+		Color = hexToColor(CONFIG.Loading.SubColor or "#C79BAC"),
 		FixedSize = true,
 		TextSize = 11,
-		Position = UDim2.new(0, 0, 0, 108 + textShift),
-		Size = UDim2.new(1, 0, 0, 18),
+		Position = UDim2.new(0, 0, 0, subY),
+		Size = UDim2.new(1, 0, 0, 16),
 		TextXAlignment = Enum.TextXAlignment.Center,
-		ZIndex = 2,
+		ZIndex = 3,
 	}, g)
+	local bar = new("Frame", {
+		Name = "Progress",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, barY),
+		Size = UDim2.new(0, 148, 0, 3),
+		BackgroundColor3 = TC.track,
+		BorderSizePixel = 0,
+		Role = "Track",
+		ZIndex = 3,
+	}, g)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, bar)
+	local fill = new("Frame", {
+		Name = "Fill",
+		Size = UDim2.new(0, 0, 1, 0),
+		BackgroundColor3 = TC.accent,
+		BorderSizePixel = 0,
+		Role = "Fill",
+		ZIndex = 4,
+	}, bar)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, fill)
+	playTween(fill, ti(dur(CONFIG.Durations.Splash), "Quint", "Out"), { Size = UDim2.new(1, 0, 1, 0) }, STAGE_TWEENS)
+
 	local inTime = dur(CONFIG.Durations.Splash) * 0.4
 	local outTime = dur(CONFIG.Durations.Splash) * 0.35
 	local total = inTime + dur(CONFIG.Durations.SplashHold) + outTime
@@ -2598,20 +2750,17 @@ showMain = function(animated)
 	setLoading(false)
 	setBackdrop("main")
 	if animated and not QUALITY.Instant then
-		if Main:IsA("CanvasGroup") then
-			Main.GroupTransparency = 1
-			playTween(Main, ti(mdur(CONFIG.Durations.Fade), CONFIG.Easing.Fade, CONFIG.Easing.FadeDir), { GroupTransparency = 0 })
-		end
-		MainColumn.Position = UDim2.new(0.5, 0, 0.5, 18)
+		MainColumn.Position = UDim2.new(0.5, 0, 0.5, 16)
 		uiTween(MainColumn, { Position = UDim2.fromScale(0.5, 0.5) }, CONFIG.Durations.Slide, "Quint", "Out")
-		if MainScale and QUALITY.ScalePop then
-			MainScale.Scale = 0.965
-			uiTween(MainScale, { Scale = 1 }, CONFIG.Durations.Slide, "Quint", "Out")
+		if MainScale then
+			if QUALITY.ScalePop then
+				MainScale.Scale = 0.97
+				uiTween(MainScale, { Scale = 1 }, CONFIG.Durations.Slide, "Quint", "Out")
+			else
+				MainScale.Scale = 1
+			end
 		end
 	else
-		if Main:IsA("CanvasGroup") then
-			Main.GroupTransparency = 0
-		end
 		MainColumn.Position = UDim2.fromScale(0.5, 0.5)
 		if MainScale then
 			MainScale.Scale = 1
@@ -2626,19 +2775,28 @@ hideMain = function(instant)
 	MainVisible = false
 	if instant or QUALITY.Instant then
 		Main.Visible = false
-		if Main:IsA("CanvasGroup") then
-			Main.GroupTransparency = 1
+		if MainScale then
+			MainScale.Scale = 1
 		end
-	else
-		if Main:IsA("CanvasGroup") then
-			playTween(Main, ti(mdur(CONFIG.Durations.Fade), CONFIG.Easing.Fade, "In"), { GroupTransparency = 1 })
-		end
-		later(mdur(CONFIG.Durations.Fade) + 0.05, function()
-			if not MainVisible then
-				Main.Visible = false
-			end
-		end)
+		MainColumn.Position = UDim2.fromScale(0.5, 0.5)
+		return
 	end
+	local outTime = mdur(CONFIG.Durations.Fade) * 0.7
+	if MainScale then
+		uiTween(MainScale, { Scale = 0.97 }, outTime, "Quad", "In")
+	end
+	local p = MainColumn.Position
+	uiTween(MainColumn, { Position = UDim2.new(p.X.Scale, p.X.Offset, p.Y.Scale, p.Y.Offset + 10) }, outTime, "Quad", "In")
+	task.delay(outTime + 0.05, function()
+		if DESTROYED or MainVisible or not Main then
+			return
+		end
+		Main.Visible = false
+		if MainScale then
+			MainScale.Scale = 1
+		end
+		MainColumn.Position = UDim2.fromScale(0.5, 0.5)
+	end)
 end
 local JsonBox
 local StatusLabel
@@ -2738,20 +2896,21 @@ local function updateScale()
 	end
 	local vp = viewportSize()
 	local scaleNow = RootScale and RootScale.Scale or 1
-	local w = math.min(CONFIG.Layout.MaxWidth, fitWidth(CONFIG.Layout.MaxWidth))
-	local availH = vp.Y / math.max(0.1, scaleNow) - 150
-	local h = math.max(300, math.min(540, availH))
+	local availW = vp.X / math.max(0.1, scaleNow) - 40
+	local availH = vp.Y / math.max(0.1, scaleNow) - 72
+	local w = math.floor(clampNum(math.min(CONFIG.Layout.MaxWidth, availW), 300, CONFIG.Layout.MaxWidth))
+	local h = math.floor(clampNum(math.min(430, availH), 280, 430))
 	MainColumn.Size = UDim2.new(0, w, 0, h)
-	local sideW = math.floor(clampNum(w * 0.3, 146, 176))
+	local sideW = math.floor(clampNum(w * 0.3, 138, 168))
 	if SidebarPanel then
-		SidebarPanel.Size = UDim2.new(0, sideW, 1, -38)
+		SidebarPanel.Size = UDim2.new(0, math.max(120, sideW - 16), 1, -54)
 	end
 	if ContentPanel then
 		ContentPanel.Position = UDim2.new(0, sideW, 0, 38)
 		ContentPanel.Size = UDim2.new(1, -sideW, 1, -38)
 	end
 	if MainShadow then
-		MainShadow.Size = UDim2.new(0, w + 36, 0, h + 36)
+		MainShadow.Size = UDim2.new(0, w + 20, 0, h + 20)
 	end
 end
 
@@ -2915,6 +3074,12 @@ local function buildFeatures(addPage)
 		end,
 	}
 	for index, category in ipairs(valid) do
+		if index > 1 then
+			task.wait()
+			if DESTROYED then
+				return
+			end
+		end
 		local name = sanitizeString(tostring(category.Name or "Category " .. index), 24)
 		if name == "" then
 			name = "Category " .. index
@@ -2931,8 +3096,9 @@ local function buildFeatures(addPage)
 end
 
 local CATEGORY_ICONS = {
-	Home = "grid",
-	Loaders = "play",
+	Home = "home",
+	Loader = "ring",
+	Loaders = "ring",
 	Interface = "sliders",
 	Animation = "diamond",
 	Capture = "camera",
@@ -2942,53 +3108,63 @@ local CATEGORY_ICONS = {
 local function makeCategoryIcon(kind, parent)
 	local box = new("Frame", {
 		Name = "Icon",
-		Position = UDim2.new(0, 12, 0.5, -8),
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 12, 0.5, 0),
 		Size = UDim2.new(0, 16, 0, 16),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ZIndex = 3,
 	}, parent)
-	local function part(x, y, w, h, round, rot)
+	local function shape(cx, cy, w, h, rot, radius, filled)
 		local f = new("Frame", {
-			Position = UDim2.new(0, x, 0, y),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0, cx, 0, cy),
 			Size = UDim2.new(0, w, 0, h),
 			BackgroundColor3 = TC.textDisabled,
+			BackgroundTransparency = filled and 0 or 1,
 			BorderSizePixel = 0,
 			Rotation = rot or 0,
 			ZIndex = 3,
 		}, box)
-		new("UICorner", { CornerRadius = UDim.new(0, round or 1) }, f)
+		new("UICorner", { CornerRadius = UDim.new(0, radius or 1) }, f)
+		if not filled then
+			new("UIStroke", { Color = TC.textDisabled, Transparency = 0, Thickness = 1.6 }, f)
+		end
 		return f
 	end
 	if kind == "list" then
-		part(0, 2, 16, 2, 1)
-		part(0, 7, 16, 2, 1)
-		part(0, 12, 10, 2, 1)
+		shape(8, 4, 13, 2, 0, 1, true)
+		shape(8, 8, 13, 2, 0, 1, true)
+		shape(5.5, 12, 8, 2, 0, 1, true)
 	elseif kind == "sliders" then
-		part(0, 2, 16, 2, 1)
-		part(0, 9, 16, 2, 1)
-		part(10, 0, 5, 6, 2)
-		part(2, 7, 5, 6, 2)
+		shape(8, 5, 13, 2, 0, 1, true)
+		shape(8, 11, 13, 2, 0, 1, true)
+		shape(5, 5, 5, 5, 0, 2.5, true)
+		shape(11, 11, 5, 5, 0, 2.5, true)
 	elseif kind == "diamond" then
-		part(3, 3, 10, 10, 2, 45)
-	elseif kind == "play" then
-		part(3, 2, 4, 3, 1)
-		part(3, 6, 8, 3, 1)
-		part(3, 10, 12, 3, 1)
+		shape(8, 8, 8, 8, 45, 2, true)
+	elseif kind == "ring" then
+		shape(8, 8, 12, 12, 0, 6, false)
+		shape(8, 4.2, 4, 4, 0, 2, true)
 	elseif kind == "cog" then
-		part(6, 0, 4, 4, 2)
-		part(6, 12, 4, 4, 2)
-		part(0, 6, 4, 4, 2)
-		part(12, 6, 4, 4, 2)
-		part(4, 4, 8, 8, 3)
+		shape(8, 8, 11, 11, 0, 5.5, false)
+		shape(8, 1.7, 2, 3, 0, 1, true)
+		shape(8, 14.3, 2, 3, 0, 1, true)
+		shape(1.7, 8, 3, 2, 0, 1, true)
+		shape(14.3, 8, 3, 2, 0, 1, true)
 	elseif kind == "camera" then
-		part(0, 4, 16, 11, 3)
-		part(5, 0, 6, 4, 1)
+		shape(8, 9.5, 14, 9, 0, 3, false)
+		shape(8, 3.6, 5, 3, 0, 1.5, true)
+		shape(8, 9.5, 4.5, 4.5, 0, 2.25, false)
+	elseif kind == "home" then
+		shape(8, 10.6, 10, 7.5, 0, 2, false)
+		shape(5.2, 4.9, 6.6, 2.2, -40, 1.1, true)
+		shape(10.8, 4.9, 6.6, 2.2, 40, 1.1, true)
 	else
-		part(0, 0, 7, 7, 2)
-		part(9, 0, 7, 7, 2)
-		part(0, 9, 7, 7, 2)
-		part(9, 9, 7, 7, 2)
+		shape(4.5, 4.5, 6, 6, 0, 2, true)
+		shape(11.5, 4.5, 6, 6, 0, 2, true)
+		shape(4.5, 11.5, 6, 6, 0, 2, true)
+		shape(11.5, 11.5, 6, 6, 0, 2, true)
 	end
 	return box
 end
@@ -3000,17 +3176,26 @@ local function tintIcon(box, color, animated)
 	local info = ti(mdur(CONFIG.Durations.Hover), "Quad", "Out")
 	for _, child in ipairs(box:GetChildren()) do
 		if child:IsA("Frame") then
-			if animated and not QUALITY.Instant then
-				playTween(child, info, { BackgroundColor3 = color })
+			local stroke = child:FindFirstChildOfClass("UIStroke")
+			if not stroke then
+				if animated and not QUALITY.Instant then
+					playTween(child, info, { BackgroundColor3 = color })
+				else
+					child.BackgroundColor3 = color
+				end
 			else
-				child.BackgroundColor3 = color
+				if animated and not QUALITY.Instant then
+					playTween(stroke, info, { Color = color })
+				else
+					stroke.Color = color
+				end
 			end
 		end
 	end
 end
 
 local function buildMain()
-	Main = new(QUALITY.Instant and "Frame" or "CanvasGroup", {
+	Main = new("Frame", {
 		Name = "Main",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
@@ -3018,38 +3203,44 @@ local function buildMain()
 		Visible = false,
 		ZIndex = 3,
 	}, Root)
-	if Main:IsA("CanvasGroup") then
-		Main.GroupTransparency = 1
-	end
 	local L = CONFIG.Layout
 	local topH = 38
+	local headerH = 78
 	MainShadow = new("Frame", {
 		Name = "Shadow",
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.new(0.5, 0, 0.5, 10),
 		Size = UDim2.new(0, 600, 0, 500),
 		BackgroundColor3 = Color3.new(0, 0, 0),
-		BackgroundTransparency = 0.55,
+		BackgroundTransparency = 0.68,
 		BorderSizePixel = 0,
 		ZIndex = 2,
 	}, Main)
-	new("UICorner", { CornerRadius = UDim.new(0, 20) }, MainShadow)
+	new("UICorner", { CornerRadius = UDim.new(0, 18) }, MainShadow)
+	ambientPetals(Main)
 	MainColumn = new("Frame", {
 		Name = "Window",
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.new(0, math.min(L.MaxWidth, 620), 0, 500),
+		Size = UDim2.new(0, L.MaxWidth, 0, 420),
 		BackgroundColor3 = TC.base,
-		BackgroundTransparency = CURRENT_THEME.PanelTransparency,
+		BackgroundTransparency = 0,
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
 		Role = "Panel",
 		ZIndex = 3,
 	}, Main)
 	MainScale = new("UIScale", { Scale = 1 }, MainColumn)
-	new("UISizeConstraint", { MaxSize = Vector2.new(L.MaxWidth, 100000) }, MainColumn)
 	new("UICorner", { CornerRadius = UDim.new(0, L.CornerRadius), Role = "Corner" }, MainColumn)
-	new("UIStroke", { Color = Color3.new(1, 1, 1), Transparency = CURRENT_THEME.StrokeTransparency, Thickness = 1, Role = "Edge" }, MainColumn)
+	new("UIStroke", { Color = TC.textPrimary, Transparency = CURRENT_THEME.StrokeTransparency, Thickness = 1, Role = "Edge", ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, MainColumn)
+	ambientPetals(MainColumn, {
+		Name = "PetalOverlay",
+		ZIndex = 60,
+		Count = 6,
+		Width = L.MaxWidth,
+		Height = 510,
+		Transparency = 0.55,
+	})
 
 	local titlebar = new("Frame", {
 		Name = "Titlebar",
@@ -3116,10 +3307,10 @@ local function buildMain()
 	closeBtn.Instance.Position = UDim2.new(1, -10, 0.5, 0)
 	closeBtn.Instance.ZIndex = 7
 	trackConn(closeBtn.Instance.MouseButton1Click:Connect(function()
-		hideMain(true)
+		hideMain(false)
 	end))
 
-	local drag = { active = false, start = nil, center = nil }
+	local drag = { active = false, start = nil, center = nil, target = nil, current = nil, conn = nil }
 	local function overClose(pos)
 		local btn = closeBtn.Instance
 		local ap = btn.AbsolutePosition
@@ -3160,6 +3351,55 @@ local function buildMain()
 		end
 		return false
 	end
+	local function clampCenter(c)
+		local vp = viewportSize()
+		local halfW = MainColumn.AbsoluteSize.X * 0.5
+		local halfH = MainColumn.AbsoluteSize.Y * 0.5
+		local minX = halfW + 8
+		local minY = halfH + 8
+		return Vector2.new(
+			clampNum(c.X, minX, math.max(minX, vp.X - halfW - 8)),
+			clampNum(c.Y, minY, math.max(minY, vp.Y - halfH - 8))
+		)
+	end
+
+	local function applyDrag(center)
+		local rs = math.max(0.1, RootScale and RootScale.Scale or 1)
+		MainColumn.Position = UDim2.new(0, center.X / rs, 0, center.Y / rs)
+	end
+
+	local function stopDragLoop()
+		if drag.conn then
+			pcall(function()
+				drag.conn:Disconnect()
+			end)
+			drag.conn = nil
+		end
+	end
+
+	local function startDragLoop()
+		if drag.conn then
+			return
+		end
+		drag.conn = RunService.RenderStepped:Connect(function(dt)
+			if not drag.target or not drag.current then
+				return
+			end
+			local remaining = drag.target - drag.current
+			if remaining.Magnitude < 0.35 then
+				drag.current = drag.target
+				applyDrag(drag.target)
+				if not drag.active then
+					stopDragLoop()
+				end
+				return
+			end
+			drag.current = drag.current:Lerp(drag.target, clampNum(dt * 38, 0, 1))
+			applyDrag(drag.current)
+		end)
+		trackConn(drag.conn)
+	end
+
 	local function beginDrag(input)
 		if drag.active or DESTROYED then
 			return
@@ -3188,88 +3428,97 @@ local function buildMain()
 		local ap = MainColumn.AbsolutePosition
 		local as = MainColumn.AbsoluteSize
 		drag.center = Vector2.new(ap.X + as.X * 0.5, ap.Y + as.Y * 0.5)
+		drag.target = drag.center
+		drag.current = drag.center
+		cancelPropTweens(MainColumn, { Position = true })
+		startDragLoop()
+		if MainShadow then
+			uiTween(MainShadow, { BackgroundTransparency = 0.58 }, CONFIG.Durations.Hover * 1.6, "Quad", "Out")
+		end
 	end
 	trackConn(UserInputService.InputBegan:Connect(beginDrag))
 	trackConn(UserInputService.InputChanged:Connect(function(input)
-		if not drag.active then
+		if not drag.active or not drag.center or not drag.start then
 			return
 		end
 		if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
 			return
 		end
-		local vp = viewportSize()
-		local rs = math.max(0.1, RootScale and RootScale.Scale or 1)
-		local delta = input.Position - drag.start
-		local center = drag.center + delta
-		local halfW = MainColumn.AbsoluteSize.X * 0.5
-		local halfH = MainColumn.AbsoluteSize.Y * 0.5
-		local cx = clampNum(center.X, halfW + 8, math.max(halfW + 8, vp.X - halfW - 8))
-		local cy = clampNum(center.Y, halfH + 8, math.max(halfH + 8, vp.Y - halfH - 8))
-		MainColumn.Position = UDim2.new(0, vp.X * 0.5 + (cx - vp.X * 0.5) / rs, 0, vp.Y * 0.5 + (cy - vp.Y * 0.5) / rs)
+		drag.target = clampCenter(drag.center + (input.Position - drag.start))
 	end))
 	trackConn(UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			drag.active = false
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		if not drag.active then
+			return
+		end
+		drag.active = false
+		if drag.target then
+			drag.target = clampCenter(drag.target)
+		end
+		if MainShadow then
+			uiTween(MainShadow, { BackgroundTransparency = 0.68 }, CONFIG.Durations.Hover * 1.6, "Quad", "Out")
 		end
 	end))
 
 	SidebarPanel = new("Frame", {
 		Name = "Sidebar",
-		Position = UDim2.new(0, 0, 0, topH),
-		Size = UDim2.new(0, 168, 1, -topH),
+		Position = UDim2.new(0, 8, 0, topH + 8),
+		Size = UDim2.new(0, 168, 1, -(topH + 16)),
 		BackgroundColor3 = TC.sidebar,
 		BackgroundTransparency = 0,
 		BorderSizePixel = 0,
 		Role = "Sidebar",
 		ZIndex = 4,
 	}, MainColumn)
-	new("Frame", {
-		Name = "Split",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 0),
-		Size = UDim2.new(0, 1, 1, 0),
-		BackgroundColor3 = TC.divider,
-		BackgroundTransparency = 0.25,
-		BorderSizePixel = 0,
-		Role = "Divider",
-		ZIndex = 6,
-	}, SidebarPanel)
+	new("UICorner", { CornerRadius = UDim.new(0, L.CornerRadius), Role = "Corner" }, SidebarPanel)
+	new("UIStroke", { Color = TC.textPrimary, Transparency = CURRENT_THEME.StrokeTransparency + 0.04, Thickness = 1, Role = "CardEdge" }, SidebarPanel)
 	local portraitId = tostring(CONFIG.Brand.AvatarImageId or ""):gsub("%D", "")
 	local avatar = new("Frame", {
 		Name = "Avatar",
-		Position = UDim2.new(0, 14, 0, 14),
-		Size = UDim2.new(0, 32, 0, 32),
+		Position = UDim2.new(0, 14, 0, 13),
+		Size = UDim2.new(0, 34, 0, 34),
 		BackgroundColor3 = TC.accent,
-		BackgroundTransparency = portraitId ~= "" and 1 or 0,
+		BackgroundTransparency = 0,
 		BorderSizePixel = 0,
 		Role = "Accent",
 		ZIndex = 6,
 	}, SidebarPanel)
 	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, avatar)
-	if portraitId ~= "" then
-		local portrait = new("ImageLabel", {
-			Name = "Portrait",
-			Size = UDim2.fromScale(1, 1),
-			BackgroundTransparency = 1,
-			Image = "rbxassetid://" .. portraitId,
-			ScaleType = Enum.ScaleType.Crop,
-			ZIndex = 7,
-		}, avatar)
-		new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, portrait)
-		new("UIStroke", { Color = TC.accent, Transparency = 0.35, Thickness = 1.5, Role = "Accent" }, portrait)
-	else
-		makeLabel({
-			Name = "Letter",
-			Text = string.sub(sanitizeString(tostring(CONFIG.Brand.Name or "B"), 24), 1, 1),
-			Tier = "OnAccent",
-			TextRole = "Caption",
-			Bold = true,
-			FixedSize = true,
-			TextSize = 15,
-			Size = UDim2.fromScale(1, 1),
-			TextXAlignment = Enum.TextXAlignment.Center,
-			ZIndex = 7,
-		}, avatar)
+	new("UIStroke", { Color = TC.textPrimary, Transparency = 0.84, Thickness = 1, Role = "Soft" }, avatar)
+	makeLabel({
+		Name = "Letter",
+		Text = string.sub(sanitizeString(tostring(CONFIG.Brand.Name or "B"), 24), 1, 1),
+		Tier = "OnAccent",
+		TextRole = "Caption",
+		Bold = true,
+		FixedSize = true,
+		TextSize = 16,
+		Size = UDim2.fromScale(1, 1),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		ZIndex = 7,
+	}, avatar)
+	local portrait = new("ImageLabel", {
+		Name = "Portrait",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Image = portraitId ~= "" and ("rbxassetid://" .. portraitId) or "",
+		ScaleType = Enum.ScaleType.Crop,
+		Visible = portraitId ~= "",
+		ZIndex = 8,
+	}, avatar)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, portrait)
+	if portraitId == "" and PLAYER then
+		task.spawn(function()
+			local ok, url = pcall(function()
+				return Players:GetUserThumbnailAsync(PLAYER.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+			end)
+			if ok and type(url) == "string" and url ~= "" and not DESTROYED and portrait.Parent then
+				portrait.Image = url
+				portrait.Visible = true
+			end
+		end)
 	end
 	makeLabel({
 		Name = "Brand",
@@ -3311,16 +3560,16 @@ local function buildMain()
 		Name = "Pill",
 		Position = UDim2.new(0, 0, 0, 0),
 		Size = UDim2.new(1, 0, 0, 32),
-		BackgroundColor3 = TC.button,
-		BackgroundTransparency = 0.2,
+		BackgroundColor3 = TC.accent,
+		BackgroundTransparency = 0.88,
 		BorderSizePixel = 0,
 		ZIndex = 5,
 	}, NavList)
-	new("UICorner", { CornerRadius = UDim.new(0, 7), Role = "Small" }, NavPill)
+	new("UICorner", { CornerRadius = UDim.new(0, 8), Role = "Small" }, NavPill)
 	NavIndicator = new("Frame", {
 		Name = "Indicator",
 		Position = UDim2.new(0, -6, 0, 8),
-		Size = UDim2.new(0, 2, 0, 16),
+		Size = UDim2.new(0, 3, 0, 16),
 		BackgroundColor3 = TC.accent,
 		BorderSizePixel = 0,
 		Role = "Accent",
@@ -3368,7 +3617,7 @@ local function buildMain()
 	new("UICorner", { CornerRadius = UDim.new(0, 4), Role = "Small" }, chip)
 	makeLabel({
 		Name = "Key",
-		Text = "H",
+		Text = "RS",
 		Tier = "Secondary",
 		TextRole = "Caption",
 		FixedSize = true,
@@ -3379,7 +3628,7 @@ local function buildMain()
 	}, chip)
 	makeLabel({
 		Name = "Hint",
-		Text = "drag to move",
+		Text = "close · drag",
 		Tier = "Disabled",
 		TextRole = "Caption",
 		FixedSize = true,
@@ -3396,50 +3645,27 @@ local function buildMain()
 		Size = UDim2.new(1, -168, 1, -topH),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		ClipsDescendants = true,
 		ZIndex = 4,
 	}, MainColumn)
 	local banner = new("Frame", {
-		Name = "Banner",
-		Size = UDim2.new(1, 0, 0, 96),
-		BackgroundColor3 = TC.bannerA,
+		Name = "Header",
+		Size = UDim2.new(1, 0, 0, headerH),
+		BackgroundColor3 = TC.base,
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
 		ZIndex = 1,
 	}, ContentPanel)
-	new("UIGradient", { Role = "Banner" }, banner)
-	local waveA = new("Frame", {
-		Name = "WaveA",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(0.74, 0, 0.58, 0),
-		Size = UDim2.new(1.1, 0, 1.7, 0),
-		BackgroundColor3 = TC.bannerB,
+	new("UIGradient", { Role = "Header" }, banner)
+	local headerMark = new("Frame", {
+		Name = "Mark",
+		Position = UDim2.new(0, 18, 0, 24),
+		Size = UDim2.new(0, 3, 0, 16),
+		BackgroundColor3 = TC.accent,
 		BorderSizePixel = 0,
-		Rotation = -16,
-		ZIndex = 2,
+		Role = "Accent",
+		ZIndex = 4,
 	}, banner)
-	new("UIGradient", { Role = "BannerWave" }, waveA)
-	local waveB = new("Frame", {
-		Name = "WaveB",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(0.2, 0, 0.98, 0),
-		Size = UDim2.new(1.2, 0, 2, 0),
-		BackgroundColor3 = TC.bannerA,
-		BackgroundTransparency = 0.25,
-		BorderSizePixel = 0,
-		Rotation = 12,
-		ZIndex = 2,
-	}, banner)
-	new("UIGradient", { Role = "BannerWave" }, waveB)
-	local scrim = new("Frame", {
-		Name = "Scrim",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = TC.base,
-		BackgroundTransparency = 0.2,
-		BorderSizePixel = 0,
-		ZIndex = 3,
-	}, banner)
-	new("UIGradient", { Role = "BannerScrim" }, scrim)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, headerMark)
 	BannerTitle = makeLabel({
 		Name = "Title",
 		Text = "Home",
@@ -3447,9 +3673,9 @@ local function buildMain()
 		TextRole = "Title",
 		Bold = true,
 		FixedSize = true,
-		TextSize = 20,
-		Position = UDim2.new(0, 16, 0, 18),
-		Size = UDim2.new(1, -32, 0, 28),
+		TextSize = 18,
+		Position = UDim2.new(0, 29, 0, 20),
+		Size = UDim2.new(1, -45, 0, 24),
 		Truncate = true,
 		ZIndex = 4,
 	}, banner)
@@ -3460,27 +3686,26 @@ local function buildMain()
 		TextRole = "Caption",
 		FixedSize = true,
 		TextSize = 11,
-		Position = UDim2.new(0, 16, 0, 46),
-		Size = UDim2.new(1, -32, 0, 16),
+		Position = UDim2.new(0, 29, 0, 44),
+		Size = UDim2.new(1, -45, 0, 16),
 		Truncate = true,
 		ZIndex = 4,
 	}, banner)
-
-	if QUALITY.Name == "High" then
-		playTween(waveA, ti(26, "Sine", "InOut", -1, true), {
-			Position = UDim2.new(0.64, 0, 0.5, 0),
-			Rotation = -7,
-		})
-		playTween(waveB, ti(32, "Sine", "InOut", -1, true), {
-			Position = UDim2.new(0.27, 0, 0.86, 0),
-			Rotation = 18,
-		})
-	end
+	new("Frame", {
+		Name = "HeaderRule",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 0, 1, 0),
+		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundColor3 = TC.divider,
+		BorderSizePixel = 0,
+		Role = "Divider",
+		ZIndex = 4,
+	}, banner)
 
 	local pagesHost = new("Frame", {
 		Name = "Pages",
-		Position = UDim2.new(0, 0, 0, 96),
-		Size = UDim2.new(1, 0, 1, -96),
+		Position = UDim2.new(0, 0, 0, headerH),
+		Size = UDim2.new(1, 0, 1, -headerH),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
@@ -3652,6 +3877,11 @@ local function buildMain()
 		return scroll
 	end
 
+	task.wait()
+	if DESTROYED then
+		return
+	end
+
 	local home = addPage("Home", "quick actions")
 	local actions = makeSection(home, "Quick actions", 2)
 	makeSettingRow(actions, {
@@ -3705,6 +3935,11 @@ local function buildMain()
 			end))
 		end,
 	})
+
+	task.wait()
+	if DESTROYED then
+		return
+	end
 
 	loadersIndex = #pages + 1
 	local loaders = addPage("Loader", "loading animation")
@@ -3762,7 +3997,17 @@ local function buildMain()
 		end,
 	})
 
+	task.wait()
+	if DESTROYED then
+		return
+	end
+
 	buildFeatures(addPage)
+
+	task.wait()
+	if DESTROYED then
+		return
+	end
 
 	local settings = addPage("Settings", "appearance and about")
 	local appearance = makeSection(settings, "Appearance", 2)
@@ -3821,6 +4066,7 @@ local function buildMain()
 				toast("Theme: " .. name)
 			end))
 		end
+		ThemeCache.list = nil
 	end
 	rebuildThemeChips()
 	makeSettingRow(appearance, {
@@ -3859,8 +4105,8 @@ local function buildMain()
 	end
 	table.insert(REFRESH, function()
 		if NavPill then
-			NavPill.BackgroundColor3 = TC.button
-			NavPill.BackgroundTransparency = 0.2
+			NavPill.BackgroundColor3 = TC.accent
+			NavPill.BackgroundTransparency = 0.88
 		end
 		if NavIndicator then
 			NavIndicator.BackgroundColor3 = TC.accent
@@ -4097,16 +4343,16 @@ local function buildCustomize()
 	end))
 	trackConn(reset.Instance.MouseButton1Click:Connect(function()
 		if CustomTab == "Theme" then
-			applyTheme(CONFIG.Theme, true)
+			applyTheme(SKINS["Sakura"], true)
 			if PLAYER then
-				PLAYER:SetAttribute("BlossomSkin", "Obsidian")
+				PLAYER:SetAttribute("BlossomSkin", "Sakura")
 			end
 			saveCustomSkins()
 			JsonBox.Text = themeToJSON(CURRENT_THEME)
 			if rebuildThemeChips then
 				rebuildThemeChips()
 			end
-			statusText("Reset to Obsidian.", false)
+			statusText("Reset to Sakura.", false)
 		else
 			statusText("Config kept. Paste a config object and press Apply.", false)
 		end
@@ -4205,7 +4451,7 @@ local function buildCustomize()
 				end
 			end
 			updateScale()
-			applyTheme(CURRENT_THEME, true)
+			applyTheme(CURRENT_THEME, false)
 			local noteText = "Config applied."
 			if #notes > 0 then
 				noteText = noteText .. " " .. table.concat(notes, "; ")
@@ -4222,25 +4468,25 @@ local function buildCustomize()
 end
 
 toggleDebug = function()
-	DebugVisible = not DebugVisible
+	DebugState.visible = not DebugState.visible
 	if DebugFrame then
-		DebugFrame.Visible = DebugVisible
+		DebugFrame.Visible = DebugState.visible
 	end
-	if DebugVisible then
-		if DebugConn then
+	if DebugState.visible then
+		if DebugState.conn then
 			return
 		end
-		DebugClock = 0
-		DebugFrames = 0
-		DebugConn = RunService.RenderStepped:Connect(function(dt)
-			DebugClock = DebugClock + dt
-			DebugFrames = DebugFrames + 1
-			if DebugClock < CONFIG.Debug.UpdateRate then
+		DebugState.clock = 0
+		DebugState.frames = 0
+		DebugState.conn = RunService.RenderStepped:Connect(function(dt)
+			DebugState.clock = DebugState.clock + dt
+			DebugState.frames = DebugState.frames + 1
+			if DebugState.clock < CONFIG.Debug.UpdateRate then
 				return
 			end
-			DebugFps = math.floor(DebugFrames / math.max(DebugClock, 0.0001) + 0.5)
-			DebugClock = 0
-			DebugFrames = 0
+			DebugState.fps = math.floor(DebugState.frames / math.max(DebugState.clock, 0.0001) + 0.5)
+			DebugState.clock = 0
+			DebugState.frames = 0
 			if not DebugFrame then
 				return
 			end
@@ -4248,14 +4494,19 @@ toggleDebug = function()
 			if not lines then
 				return
 			end
-			local ms = 1000 / math.max(DebugFps, 1)
-			lines.Text = string.format("fps %d   ms %.1f\ninstances %d\nquality %s  scale %.2f", DebugFps, ms, #Gui:GetDescendants(), QUALITY.Name, QUALITY.DurationScale)
+			local ms = 1000 / math.max(DebugState.fps, 1)
+			DebugState.instClock = DebugState.instClock + CONFIG.Debug.UpdateRate
+			if DebugState.instClock >= 1 or not DebugState.instances then
+				DebugState.instClock = 0
+				DebugState.instances = Gui and #Gui:GetDescendants() or 0
+			end
+			lines.Text = string.format("fps %d   ms %.1f\ninstances %d\nquality %s  scale %.2f", DebugState.fps, ms, DebugState.instances, QUALITY.Name, QUALITY.DurationScale)
 		end)
-	elseif DebugConn then
+	elseif DebugState.conn then
 		pcall(function()
-			DebugConn:Disconnect()
+			DebugState.conn:Disconnect()
 		end)
-		DebugConn = nil
+		DebugState.conn = nil
 	end
 end
 
@@ -4283,7 +4534,7 @@ local function buildDebug()
 		TextYAlignment = Enum.TextYAlignment.Top,
 		TextWrapped = false,
 	}, DebugFrame)
-	DebugVisible = false
+	DebugState.visible = false
 	if CONFIG.Debug.StartVisible then
 		toggleDebug()
 	end
@@ -4298,6 +4549,7 @@ local function buildGui()
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 		Enabled = true,
 	}, PLAYER_GUI)
+	Gui:SetAttribute("Building", true)
 	local protectGui = SkinStore.fn("protect_gui")
 	if protectGui then
 		pcall(protectGui, Gui)
@@ -4327,7 +4579,7 @@ local function buildGui()
 		Role = "Backdrop",
 		ZIndex = 1,
 	}, Root)
-	if CONFIG.Loading.LogoMode ~= "Off" then
+	if CONFIG.Loading.LogoMode == "Image" and CONFIG.Loading.LogoImageId ~= "" then
 		local logoSize = clampNum(math.floor(tonumber(CONFIG.Loading.LogoSize) or 72), 24, 320)
 		local offsetY = tonumber(CONFIG.Loading.LogoOffsetY) or -110
 		LoadingLogo = new("Frame", {
@@ -4481,9 +4733,22 @@ local function buildGui()
 		TextRole = "Caption",
 	}, ToastGroup)
 	updateScale()
+	task.wait()
+	if DESTROYED then
+		return
+	end
 	buildMain()
+	task.wait()
+	if DESTROYED then
+		return
+	end
 	buildCustomize()
+	task.wait()
+	if DESTROYED then
+		return
+	end
 	buildDebug()
+	Gui:SetAttribute("Building", false)
 end
 local destroyAll
 local UserHidden = false
@@ -4512,7 +4777,19 @@ local function toggleMenuVisibility()
 		return
 	end
 	UserHidden = not UserHidden
-	applyControlVisibility()
+	if UserHidden then
+		hideMain(false)
+		if Customize then
+			Customize.Visible = false
+		end
+	elseif MainVisible then
+		Main.Visible = true
+		if Customize and CustomizeOpen then
+			Customize.Visible = true
+		end
+	else
+		showMain(true)
+	end
 	toast(UserHidden and "Menu hidden" or "Menu shown")
 end
 
@@ -4587,7 +4864,7 @@ end
 
 applyConfigNow = function()
 	updateScale()
-	applyTheme(CURRENT_THEME, true)
+	applyTheme(CURRENT_THEME, false)
 	toast("Config re-read")
 	if not PLAYING then
 		playGallery()
@@ -4698,7 +4975,7 @@ playGallery = function()
 end
 
 local function handleInput(input)
-	if DESTROYED then
+	if DESTROYED or (Gui and Gui:GetAttribute("Building") == true) then
 		return
 	end
 	if input.KeyCode == CONFIG.DestroyKey and UserInputService:IsKeyDown(CONFIG.DestroyModifier) then
@@ -4796,7 +5073,7 @@ local function detectQuality()
 		end)
 		trackConn(conn)
 		local started = os.clock()
-		while count < target and os.clock() - started < 1.2 do
+		while count < target and os.clock() - started < 0.5 do
 			task.wait(0.01)
 		end
 		if count > 0 then
@@ -4818,45 +5095,45 @@ local function startQualityMonitor()
 	if not CONFIG.Quality.Auto or CONFIG.Quality.Level ~= "Auto" then
 		return
 	end
-	local clock = 0
-	local frames = 0
-	local total = 0
-	trackConn(RunService.RenderStepped:Connect(function(dt)
-		if dt <= 0 or dt >= 1 then
-			return
-		end
-		local interval = tonumber(CONFIG.Quality.RecheckInterval) or 0
-		if interval <= 0 then
-			clock = 0
-			frames = 0
-			total = 0
-			return
-		end
-		clock = clock + dt
-		frames = frames + 1
-		total = total + dt
-		if clock < interval then
-			return
-		end
-		local fps = frames / math.max(total, 0.001)
-		clock = 0
-		frames = 0
-		total = 0
-		local target = chooseQuality(fps)
-		if target == QUALITY.Name then
-			return
-		end
-		if qualityRank(target) > qualityRank(QUALITY.Name) then
-			local boundary = (target == "High") and (tonumber(CONFIG.Quality.FpsHigh) or 50) or (tonumber(CONFIG.Quality.FpsLow) or 30)
-			local margin = tonumber(CONFIG.Quality.UpgradeMargin) or 3
-			if fps < boundary + margin then
+	task.spawn(function()
+		while not DESTROYED do
+			local interval = tonumber(CONFIG.Quality.RecheckInterval) or 0
+			if interval <= 0 then
 				return
 			end
+			task.wait(math.max(2, interval))
+			if DESTROYED then
+				return
+			end
+			local frames = 0
+			local total = 0
+			local conn = RunService.RenderStepped:Connect(function(dt)
+				if dt <= 0 or dt >= 1 then
+					return
+				end
+				frames = frames + 1
+				total = total + dt
+			end)
+			task.wait(1)
+			pcall(function()
+				conn:Disconnect()
+			end)
+			if not DESTROYED and frames >= 8 then
+				local fps = frames / math.max(total, 0.001)
+				local target = chooseQuality(fps)
+				if target ~= QUALITY.Name then
+					local upgrade = qualityRank(target) > qualityRank(QUALITY.Name)
+					local boundary = (target == "High") and (tonumber(CONFIG.Quality.FpsHigh) or 50) or (tonumber(CONFIG.Quality.FpsLow) or 30)
+					local margin = tonumber(CONFIG.Quality.UpgradeMargin) or 3
+					if not upgrade or fps >= boundary + margin then
+						applyQuality(target)
+						manageBlur()
+						print("Blossom quality " .. target .. "  average " .. string.format("%.0f", fps) .. " fps")
+					end
+				end
+			end
 		end
-		applyQuality(target)
-		manageBlur()
-		print("Blossom quality " .. target .. "  average " .. string.format("%.0f", fps) .. " fps")
-	end))
+	end)
 end
 
 local function activeSkinName()
@@ -4866,7 +5143,7 @@ local function activeSkinName()
 			return stored
 		end
 	end
-	return "Obsidian"
+	return "Sakura"
 end
 
 local function destroyGuiCopies()
@@ -5008,14 +5285,33 @@ local function main()
 	detectQuality()
 	loadCustomSkins()
 	local skinName = activeSkinName()
-	CURRENT_THEME = copyTable(SKINS[skinName] or SKINS["Obsidian"])
+	CURRENT_THEME = copyTable(SKINS[skinName] or SKINS["Sakura"])
 	recomputeColors(CURRENT_THEME)
 	trackConn(UserInputService.InputBegan:Connect(handleInput))
 	local camera = workspace.CurrentCamera
 	if camera then
-		trackConn(camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale))
+		local resizePending = false
+		trackConn(camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+			if resizePending then
+				return
+			end
+			resizePending = true
+			task.delay(0.08, function()
+				resizePending = false
+				if not DESTROYED then
+					updateScale()
+				end
+			end)
+		end))
 	end
 	buildGui()
+	if DESTROYED then
+		return
+	end
+	task.wait()
+	if DESTROYED then
+		return
+	end
 	applyTheme(CURRENT_THEME, false)
 	preloadThemeImages(CURRENT_THEME)
 	local skinBtn = SkinButtons[skinName]
@@ -5050,11 +5346,11 @@ destroyAll = function()
 	DESTROYED = true
 	TOKEN = TOKEN + 1
 	PLAYING = false
-	if DebugConn then
+	if DebugState.conn then
 		pcall(function()
-			DebugConn:Disconnect()
+			DebugState.conn:Disconnect()
 		end)
-		DebugConn = nil
+		DebugState.conn = nil
 	end
 	cancelList(STAGE_TWEENS)
 	cancelList(THEME_TWEENS)
