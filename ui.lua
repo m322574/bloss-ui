@@ -696,6 +696,7 @@ local NavList
 local NavPill
 local NavIndicator
 local Customize
+local CancelWindowDrag
 local DebugFrame
 local CountdownLabel
 local ToastGroup
@@ -2195,6 +2196,7 @@ local function makeSlider(parent, opts)
 		Size = opts.Size or UDim2.new(1, 0, 0, 54),
 		LayoutOrder = opts.Order or 0,
 	}, parent)
+	wrap:SetAttribute("NoDrag", true)
 	local header = new("Frame", {
 		Name = "Header",
 		BackgroundTransparency = 1,
@@ -2236,6 +2238,15 @@ local function makeSlider(parent, opts)
 		Role = "Fill",
 	}, trackFrame)
 	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, fill)
+	local hit = new("Frame", {
+		Name = "Hit",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 0, 0.5, 0),
+		Size = UDim2.new(1, 0, 0, 24),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+	}, trackFrame)
+	hit:SetAttribute("NoDrag", true)
 	local knob = new("Frame", {
 		Name = "Knob",
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -2297,8 +2308,9 @@ local function makeSlider(parent, opts)
 		valueLabel.Text = formatValue(state.value)
 	end
 
-	local function commit(value, animated)
-		local nextValue = snap(clampNum(value, minV, maxV))
+	local function commit(value, animated, raw)
+		local clamped = clampNum(value, minV, maxV)
+		local nextValue = raw and clamped or snap(clamped)
 		local changed = nextValue ~= state.value
 		state.value = nextValue
 		place(animated)
@@ -2316,20 +2328,48 @@ local function makeSlider(parent, opts)
 		return minV + a * (maxV - minV)
 	end
 
+	local function pointInRect(obj, point, padY)
+		local ap = obj.AbsolutePosition
+		local as = obj.AbsoluteSize
+		local pad = padY or 0
+		return point.X >= ap.X and point.X <= ap.X + as.X and point.Y >= ap.Y - pad and point.Y <= ap.Y + as.Y + pad
+	end
+
+	local function onScreen()
+		local o = wrap
+		while o and o ~= Gui do
+			if o:IsA("GuiObject") and o.Visible ~= true then
+				return false
+			end
+			o = o.Parent
+		end
+		return true
+	end
+
 	local function beginDrag(input)
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
 			return
 		end
-		local fromKnob = input.Target == knob
+		local pos = input.Position
+		if not pos or (Customize and Customize.Visible) or not onScreen() then
+			return
+		end
+		local point = Vector2.new(pos.X, pos.Y)
+		if not pointInRect(hit, point, 4) then
+			return
+		end
+		if CancelWindowDrag then
+			CancelWindowDrag()
+		end
+		local fromKnob = pointInRect(knob, point, 2)
 		state.offset = fromKnob and (state.value - valueFromInput(input)) or 0
 		state.dragging = true
 		if not fromKnob then
-			commit(valueFromInput(input), false)
+			commit(valueFromInput(input), false, true)
 		end
 	end
 
-	trackConn(trackFrame.InputBegan:Connect(beginDrag))
-	trackConn(knob.InputBegan:Connect(beginDrag))
+	trackConn(UserInputService.InputBegan:Connect(beginDrag))
 	trackConn(UserInputService.InputChanged:Connect(function(input)
 		if not state.dragging then
 			return
@@ -2338,13 +2378,13 @@ local function makeSlider(parent, opts)
 			if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
 				state.dragging = false
 				state.offset = 0
-				place(true)
+				commit(state.value, true)
 				return
 			end
 		elseif input.UserInputType ~= Enum.UserInputType.Touch then
 			return
 		end
-		commit(valueFromInput(input) + state.offset, false)
+		commit(valueFromInput(input) + state.offset, false, true)
 	end))
 	trackConn(UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
@@ -2355,12 +2395,15 @@ local function makeSlider(parent, opts)
 		end
 		state.dragging = false
 		state.offset = 0
-		place(true)
+		commit(state.value, true)
 	end))
-	trackConn(trackFrame.MouseEnter:Connect(function()
+	trackConn(hit.MouseEnter:Connect(function()
 		hoverTween(knob, { Size = UDim2.new(0, 15, 0, 15) }, true)
 	end))
-	trackConn(trackFrame.MouseLeave:Connect(function()
+	trackConn(hit.MouseLeave:Connect(function()
+		if state.dragging then
+			return
+		end
 		hoverTween(knob, { Size = UDim2.new(0, 12, 0, 12) }, false)
 	end))
 
@@ -3269,6 +3312,15 @@ local function buildMain()
 			drag.target = clampCenter(drag.target)
 		end
 	end
+	CancelWindowDrag = function()
+		if not drag.active then
+			return
+		end
+		drag.active = false
+		drag.target = nil
+		drag.current = nil
+		stopDragLoop()
+	end
 
 	local function pushDrag(input)
 		if not drag.active or not drag.center or not drag.start or not input then
@@ -3305,7 +3357,7 @@ local function buildMain()
 		if overClose(point) then
 			return
 		end
-		if not fromHandle and (not overWindow(point) or blockedAt(point)) then
+		if not fromHandle and (not overWindow(point) or blockedAt(point) or isInteractive(input.Target)) then
 			return
 		end
 		if drag.active then
@@ -5072,6 +5124,7 @@ destroyAll = function()
 	DESTROYED = true
 	TOKEN = TOKEN + 1
 	PLAYING = false
+	CancelWindowDrag = nil
 	if DebugState.conn then
 		pcall(function()
 			DebugState.conn:Disconnect()
