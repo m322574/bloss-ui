@@ -6,138 +6,249 @@ local ContentProvider = game:GetService("ContentProvider")
 local HttpService = game:GetService("HttpService")
 local CaptureService = game:GetService("CaptureService")
 local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local function copyTable(t)
+local Blossom = {
+	Version = "3.0",
+	Modules = {},
+	ModuleById = {},
+	ModuleErrors = {},
+}
+
+local function copy(value)
+	if type(value) ~= "table" then
+		return value
+	end
 	local out = {}
-	for k, v in pairs(t) do
-		if type(v) == "table" then
-			out[k] = copyTable(v)
-		else
-			out[k] = v
-		end
+	for key, entry in pairs(value) do
+		out[key] = copy(entry)
 	end
 	return out
 end
 
-local function clampNum(v, lo, hi)
-	if v < lo then
-		return lo
+local function clamp(value, low, high)
+	if value < low then
+		return low
 	end
-	if v > hi then
-		return hi
+	if value > high then
+		return high
 	end
-	return v
+	return value
 end
 
-local function mixColor(a, b, t)
+local function mix(a, b, t)
 	return Color3.new(a.R + (b.R - a.R) * t, a.G + (b.G - a.G) * t, a.B + (b.B - a.B) * t)
 end
 
-local function hexToColor(hex)
-	local r = tonumber(hex:sub(2, 3), 16)
-	local g = tonumber(hex:sub(4, 5), 16)
-	local b = tonumber(hex:sub(6, 7), 16)
+local function hex(value)
+	if type(value) ~= "string" then
+		return Color3.new(1, 1, 1)
+	end
+	local r = tonumber(value:sub(2, 3), 16)
+	local g = tonumber(value:sub(4, 5), 16)
+	local b = tonumber(value:sub(6, 7), 16)
 	if not r or not g or not b then
 		return Color3.new(1, 1, 1)
 	end
 	return Color3.fromRGB(r, g, b)
 end
 
-local function sanitizeString(s, maxLen)
-	if type(s) ~= "string" then
+local function isHex(value)
+	return type(value) == "string" and value:match("^#%x%x%x%x%x%x$") ~= nil
+end
+
+local function clean(text, limit)
+	if type(text) ~= "string" then
 		return ""
 	end
-	s = s:gsub("%c", "")
-	s = s:match("^%s*(.-)%s*$") or ""
-	if #s > maxLen then
-		s = s:sub(1, maxLen)
+	text = text:gsub("%c", "")
+	text = text:match("^%s*(.-)%s*$") or ""
+	if limit and #text > limit then
+		text = text:sub(1, limit)
 	end
-	return s
+	return text
 end
 
-local function isHexColor(s)
-	if type(s) ~= "string" then
-		return false
+local function safeCall(fn, ...)
+	if type(fn) ~= "function" then
+		return false, "not a function"
 	end
-	return s:match("^#%x%x%x%x%x%x$") ~= nil
+	local ok, result = xpcall(fn, function(err)
+		return tostring(err) .. "\n" .. debug.traceback("", 2)
+	end, ...)
+	return ok, result
 end
 
-local ASSETS = {
-	LoaderLogo = "152989766",
-	Avatar = "7395055006",
+local function viewport()
+	local camera = workspace.CurrentCamera
+	return camera and camera.ViewportSize or Vector2.new(1280, 720)
+end
+
+local Device = {
+
+	mobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled,
+	touch = UserInputService.TouchEnabled,
+	hover = UserInputService.MouseEnabled,
 }
+
+local BASE_THEME = {
+	Name = "Obsidian",
+	Mode = "dark",
+	Accent = "#F072A8",
+	Base = "#0E1116",
+	PanelTransparency = 0,
+	CardTransparency = 0,
+	StrokeTransparency = 0.9,
+	StrokeThickness = 1,
+	GradientTop = "#FFFFFF",
+	GradientTopTransparency = 0.94,
+	GradientBottomTransparency = 1,
+	TextPrimary = "#EEF2F7",
+	TextSecondary = "#8B94A3",
+	TextDisabled = "#545C69",
+	DimColor = "#05070A",
+	DimTransparency = 0.38,
+	ProgressTrack = "#2A1C24",
+	ProgressFill = "#F072A8",
+	SkeletonBase = "#171C24",
+	SkeletonHighlight = "#232A34",
+	ShimmerTransparency = 0.3,
+	Font = "GothamMedium",
+	CornerRadius = 10,
+	Spacing = 12,
+	BackgroundImage = "",
+	LogoImage = "",
+	SpinnerImage = "",
+	TextureImage = "",
+	BlurEnabled = true,
+	BlurSize = 12,
+	SidebarColor = "#0A0C10",
+	CardColor = "#15191F",
+	DividerColor = "#22272F",
+	BannerA = "#5A1233",
+	BannerB = "#F072A8",
+	BannerC = "#12070E",
+}
+
+local function extend(base, overrides)
+	local theme = copy(base)
+	for key, value in pairs(overrides) do
+		theme[key] = value
+	end
+	return theme
+end
+
+local SKINS = {
+	Obsidian = copy(BASE_THEME),
+	Porcelain = extend(BASE_THEME, {
+		Name = "Porcelain", Mode = "light", Accent = "#0E8C6D", Base = "#F3F5F9",
+		StrokeTransparency = 0.72, TextPrimary = "#11151C", TextSecondary = "#5A6272",
+		TextDisabled = "#98A0AD", DimColor = "#AEB6C2", DimTransparency = 0.35,
+		ProgressTrack = "#D3DAE4", ProgressFill = "#0E8C6D", SkeletonBase = "#DDE3EC",
+		SkeletonHighlight = "#EFF3F8", ShimmerTransparency = 0.35, BlurEnabled = false,
+		BlurSize = 8, SidebarColor = "#E9EDF3", CardColor = "#FFFFFF",
+		DividerColor = "#DCE3EC", BannerA = "#BFE9DE", BannerB = "#CFE4FF", BannerC = "#F3F5F9",
+	}),
+	Ember = extend(BASE_THEME, {
+		Name = "Ember", Accent = "#FF9A5A", Base = "#100D0B", TextPrimary = "#F6EDE6",
+		TextSecondary = "#A8958A", TextDisabled = "#5E5148", DimColor = "#0A0705",
+		ProgressTrack = "#241C17", ProgressFill = "#FF9A5A", SkeletonBase = "#1C1613",
+		SkeletonHighlight = "#2A211B", SidebarColor = "#0A0705", CardColor = "#1A1411",
+		DividerColor = "#2A211B", BannerA = "#7A2E0C", BannerB = "#C75B24", BannerC = "#120B07",
+	}),
+	Sakura = extend(BASE_THEME, {
+		Name = "Sakura", Mode = "light", Accent = "#D6568C", Base = "#FBF3F6",
+		StrokeTransparency = 0.74, TextPrimary = "#1C1418", TextSecondary = "#6B5A62",
+		TextDisabled = "#A8959E", DimColor = "#B9A6AE", DimTransparency = 0.34,
+		ProgressTrack = "#EEDCE4", ProgressFill = "#D6568C", SkeletonBase = "#EEDCE4",
+		SkeletonHighlight = "#F8EDF1", ShimmerTransparency = 0.35, BlurEnabled = false,
+		BlurSize = 8, CornerRadius = 12, SidebarColor = "#F6E9EF", CardColor = "#FFFFFF",
+		DividerColor = "#EFDCE5", BannerA = "#F3C3D8", BannerB = "#F7C0D6", BannerC = "#FBF3F6",
+	}),
+	Midnight = extend(BASE_THEME, {
+		Name = "Midnight", Accent = "#7C8CFF", Base = "#080A14", TextPrimary = "#E8ECFF",
+		TextSecondary = "#8890B4", TextDisabled = "#4C5470", DimColor = "#04060F",
+		DimTransparency = 0.4, ProgressTrack = "#161A2C", ProgressFill = "#7C8CFF",
+		SkeletonBase = "#131728", SkeletonHighlight = "#1D2338", BlurSize = 14,
+		CornerRadius = 12, SidebarColor = "#05060D", CardColor = "#121628",
+		DividerColor = "#1E2438", BannerA = "#2A1E7A", BannerB = "#4C3BC9", BannerC = "#070A12",
+	}),
+	Ice = extend(BASE_THEME, {
+		Name = "Ice", Mode = "light", Accent = "#0F7FA8", Base = "#EFF6FA",
+		StrokeTransparency = 0.76, TextPrimary = "#0E1B22", TextSecondary = "#4C6470",
+		TextDisabled = "#93A8B3", DimColor = "#A7BCC6", DimTransparency = 0.35,
+		ProgressTrack = "#D5E5EE", ProgressFill = "#0F7FA8", SkeletonBase = "#DCEAF2",
+		SkeletonHighlight = "#F2F9FC", ShimmerTransparency = 0.34, BlurEnabled = false,
+		BlurSize = 8, SidebarColor = "#E4EFF6", CardColor = "#FFFFFF",
+		DividerColor = "#D6E6EF", BannerA = "#C3E6F5", BannerB = "#BDF0E6", BannerC = "#EFF6FA",
+	}),
+	Moss = extend(BASE_THEME, {
+		Name = "Moss", Accent = "#8BD16B", Base = "#0A0F0B", TextPrimary = "#EAF3E6",
+		TextSecondary = "#92A48C", TextDisabled = "#52604E", DimColor = "#050805",
+		DimTransparency = 0.4, ProgressTrack = "#18211A", ProgressFill = "#8BD16B",
+		SkeletonBase = "#141B15", SkeletonHighlight = "#1E281F", CornerRadius = 8,
+		SidebarColor = "#060A07", CardColor = "#131A14", DividerColor = "#1F2921",
+		BannerA = "#1D4A31", BannerB = "#4E8F55", BannerC = "#08110B",
+	}),
+	Sandstone = extend(BASE_THEME, {
+		Name = "Sandstone", Mode = "light", Accent = "#A9713F", Base = "#F7F1E7",
+		StrokeTransparency = 0.72, TextPrimary = "#241C14", TextSecondary = "#6E6052",
+		TextDisabled = "#A6988A", DimColor = "#BCAC99", DimTransparency = 0.36,
+		ProgressTrack = "#E9DFD1", ProgressFill = "#A9713F", SkeletonBase = "#EDE3D5",
+		SkeletonHighlight = "#FAF5EC", ShimmerTransparency = 0.34, BlurEnabled = false,
+		BlurSize = 8, CornerRadius = 12, SidebarColor = "#F1E8DA", CardColor = "#FFFDF9",
+		DividerColor = "#E5D9C8", BannerA = "#EFD9B8", BannerB = "#DCC7A6", BannerC = "#FBF7EF",
+	}),
+}
+
+local SKIN_ORDER = { "Sakura", "Obsidian", "Porcelain", "Ember", "Midnight", "Ice", "Moss", "Sandstone" }
+local BUILTIN_SKINS = {}
+for _, name in ipairs(SKIN_ORDER) do
+	BUILTIN_SKINS[name] = true
+end
+
+local function skinNames()
+	local names = {}
+	for _, name in ipairs(SKIN_ORDER) do
+		if SKINS[name] then
+			table.insert(names, name)
+		end
+	end
+	return names
+end
+
+local function registerSkin(name, theme)
+	local label = clean(tostring(name or ""), 24)
+	if label == "" then
+		return nil
+	end
+	local skin = copy(theme or BASE_THEME)
+	skin.Name = label
+	SKINS[label] = skin
+	if not table.find(SKIN_ORDER, label) then
+		table.insert(SKIN_ORDER, label)
+	end
+	return label
+end
 
 local CONFIG = {
 	GuiName = "Blossom",
 	AutoPlay = true,
 	StartupDelay = 0.25,
-	DestroyModifier = Enum.KeyCode.LeftShift,
-	DestroyKey = Enum.KeyCode.Delete,
-	DebugKey = Enum.KeyCode.F1,
-	ScreenshotKey = Enum.KeyCode.F12,
-	HideKey = Enum.KeyCode.RightShift,
-	Grid = 4,
 	Brand = {
 		Name = "Blossom",
 		Tag = "script hub",
-		AvatarImageId = ASSETS.Avatar,
+		AvatarImageId = "7395055006",
 	},
-	Layout = {
-		MaxWidth = 560,
-		CompactWidth = 420,
-		Padding = 16,
-		Gap = 12,
-		CornerRadius = 12,
-		SmallCornerRadius = 8,
-		TitleSize = 24,
-		BodySize = 13,
-		CaptionSize = 12,
-		ButtonHeight = 32,
-		RowHeight = 40,
-		InputHeight = 36,
-		MinScale = 0.6,
-	},
-	Theme = {
-		Name = "Obsidian",
-		Mode = "dark",
-		Accent = "#F072A8",
-		Base = "#0E1116",
-		PanelTransparency = 0,
-		CardTransparency = 0,
-		StrokeTransparency = 0.9,
-		StrokeThickness = 1,
-		GradientTop = "#FFFFFF",
-		GradientTopTransparency = 0.94,
-		GradientBottomTransparency = 1,
-		TextPrimary = "#EEF2F7",
-		TextSecondary = "#8B94A3",
-		TextDisabled = "#545C69",
-		DimColor = "#05070A",
-		DimTransparency = 0.38,
-		ProgressTrack = "#2A1C24",
-		ProgressFill = "#F072A8",
-		SkeletonBase = "#171C24",
-		SkeletonHighlight = "#232A34",
-		ShimmerTransparency = 0.3,
-		Font = "GothamMedium",
-		CornerRadius = 10,
-		Spacing = 12,
-		BackgroundImage = "",
-		LogoImage = "",
-		SpinnerImage = "",
-		TextureImage = "",
-		BlurEnabled = true,
-		BlurSize = 12,
-		SidebarColor = "#0A0C10",
-		CardColor = "#15191F",
-		DividerColor = "#22272F",
-		BannerA = "#5A1233",
-		BannerB = "#F072A8",
-		BannerC = "#12070E",
+	Keys = {
+		Destroy = Enum.KeyCode.Delete,
+		DestroyModifier = Enum.KeyCode.LeftShift,
+		Debug = Enum.KeyCode.F1,
+		Screenshot = Enum.KeyCode.F12,
+		Hide = Enum.KeyCode.RightShift,
 	},
 	Durations = {
 		Scale = 1,
-		PreloadTimeout = 6,
 		Splash = 1.5,
 		SplashHold = 0.5,
 		Transition = 0.55,
@@ -149,39 +260,36 @@ local CONFIG = {
 		Hover = 0.16,
 		Press = 0.09,
 		Toggle = 0.22,
-		Shimmer = 1.4,
 		LoopGap = 0.5,
+		PreloadTimeout = 6,
 	},
 	Easing = {
-		Fill = "Quint",
-		FillDir = "Out",
-		Fade = "Quad",
-		FadeDir = "Out",
-		Slide = "Quint",
-		SlideDir = "Out",
-		Pop = "Back",
-		PopDir = "Out",
-		Hover = "Quad",
-		HoverDir = "Out",
-		Press = "Quad",
-		PressDir = "Out",
-		Spin = "Linear",
-		SpinDir = "Out",
-		Theme = "Quint",
-		ThemeDir = "Out",
+		Fill = "Quint", FillDir = "Out",
+		Fade = "Quad", FadeDir = "Out",
+		Slide = "Quint", SlideDir = "Out",
+		Pop = "Back", PopDir = "Out",
+		Hover = "Quad", HoverDir = "Out",
+		Press = "Quad", PressDir = "Out",
+		Spin = "Linear", SpinDir = "Out",
+		Theme = "Quint", ThemeDir = "Out",
 	},
+	Layout = {
+		MaxWidth = 560,
+		Padding = 16,
+		Gap = 12,
+		CornerRadius = 12,
+		MinScale = 0.6,
+	},
+	Theme = copy(BASE_THEME),
 	Gallery = {
 		DefaultSpeed = 1,
-		CountdownEnabled = true,
-		LoopEnabled = false,
 		Speeds = { 1, 0.5, 0.25 },
+		LoopEnabled = false,
+		CountdownEnabled = true,
 	},
 	Debug = {
 		StartVisible = false,
 		UpdateRate = 0.25,
-	},
-	Screenshot = {
-		FlashDuration = 0.2,
 	},
 	Ambient = {
 		Petals = true,
@@ -203,356 +311,3094 @@ local CONFIG = {
 		LogoColor = "#F49BC0",
 		LogoCoreColor = "#FFF6FA",
 	},
-}
-
-local SKINS = {
-	["Obsidian"] = copyTable(CONFIG.Theme),
-	["Porcelain"] = {
-		Name = "Porcelain",
-		Mode = "light",
-		Accent = "#0E8C6D",
-		Base = "#F3F5F9",
-		PanelTransparency = 0,
-		CardTransparency = 0,
-		StrokeTransparency = 0.72,
-		StrokeThickness = 1,
-		GradientTop = "#FFFFFF",
-		GradientTopTransparency = 0.9,
-		GradientBottomTransparency = 1,
-		TextPrimary = "#11151C",
-		TextSecondary = "#5A6272",
-		TextDisabled = "#98A0AD",
-		DimColor = "#AEB6C2",
-		DimTransparency = 0.35,
-		ProgressTrack = "#D3DAE4",
-		ProgressFill = "#0E8C6D",
-		SkeletonBase = "#DDE3EC",
-		SkeletonHighlight = "#EFF3F8",
-		ShimmerTransparency = 0.35,
-		Font = "GothamMedium",
-		CornerRadius = 10,
-		Spacing = 12,
-		BackgroundImage = "",
-		LogoImage = "",
-		SpinnerImage = "",
-		TextureImage = "",
-		BlurEnabled = false,
-		BlurSize = 8,
-		SidebarColor = "#E9EDF3",
-		CardColor = "#FFFFFF",
-		DividerColor = "#DCE3EC",
-		BannerA = "#BFE9DE",
-		BannerB = "#CFE4FF",
-		BannerC = "#F3F5F9",
-	},
-	["Ember"] = {
-		Name = "Ember",
-		Mode = "dark",
-		Accent = "#FF9A5A",
-		Base = "#100D0B",
-		PanelTransparency = 0,
-		CardTransparency = 0,
-		StrokeTransparency = 0.9,
-		StrokeThickness = 1,
-		GradientTop = "#FFFFFF",
-		GradientTopTransparency = 0.94,
-		GradientBottomTransparency = 1,
-		TextPrimary = "#F6EDE6",
-		TextSecondary = "#A8958A",
-		TextDisabled = "#5E5148",
-		DimColor = "#0A0705",
-		DimTransparency = 0.38,
-		ProgressTrack = "#241C17",
-		ProgressFill = "#FF9A5A",
-		SkeletonBase = "#1C1613",
-		SkeletonHighlight = "#2A211B",
-		ShimmerTransparency = 0.3,
-		Font = "GothamMedium",
-		CornerRadius = 10,
-		Spacing = 12,
-		BackgroundImage = "",
-		LogoImage = "",
-		SpinnerImage = "",
-		TextureImage = "",
-		BlurEnabled = true,
-		BlurSize = 12,
-		SidebarColor = "#0A0705",
-		CardColor = "#1A1411",
-		DividerColor = "#2A211B",
-		BannerA = "#7A2E0C",
-		BannerB = "#C75B24",
-		BannerC = "#120B07",
-	},
-	["Sakura"] = {
-		Name = "Sakura",
-		Mode = "light",
-		Accent = "#D6568C",
-		Base = "#FBF3F6",
-		PanelTransparency = 0,
-		CardTransparency = 0,
-		StrokeTransparency = 0.74,
-		StrokeThickness = 1,
-		GradientTop = "#FFFFFF",
-		GradientTopTransparency = 0.9,
-		GradientBottomTransparency = 1,
-		TextPrimary = "#1C1418",
-		TextSecondary = "#6B5A62",
-		TextDisabled = "#A8959E",
-		DimColor = "#B9A6AE",
-		DimTransparency = 0.34,
-		ProgressTrack = "#EEDCE4",
-		ProgressFill = "#D6568C",
-		SkeletonBase = "#EEDCE4",
-		SkeletonHighlight = "#F8EDF1",
-		ShimmerTransparency = 0.35,
-		Font = "GothamMedium",
-		CornerRadius = 12,
-		Spacing = 12,
-		BackgroundImage = "",
-		LogoImage = "",
-		SpinnerImage = "",
-		TextureImage = "",
-		BlurEnabled = false,
-		BlurSize = 8,
-		SidebarColor = "#F6E9EF",
-		CardColor = "#FFFFFF",
-		DividerColor = "#EFDCE5",
-		BannerA = "#F3C3D8",
-		BannerB = "#F7C0D6",
-		BannerC = "#FBF3F6",
-	},
-	["Midnight"] = {
-		Name = "Midnight",
-		Mode = "dark",
-		Accent = "#7C8CFF",
-		Base = "#080A14",
-		PanelTransparency = 0,
-		CardTransparency = 0,
-		StrokeTransparency = 0.9,
-		StrokeThickness = 1,
-		GradientTop = "#FFFFFF",
-		GradientTopTransparency = 0.94,
-		GradientBottomTransparency = 1,
-		TextPrimary = "#E8ECFF",
-		TextSecondary = "#8890B4",
-		TextDisabled = "#4C5470",
-		DimColor = "#04060F",
-		DimTransparency = 0.4,
-		ProgressTrack = "#161A2C",
-		ProgressFill = "#7C8CFF",
-		SkeletonBase = "#131728",
-		SkeletonHighlight = "#1D2338",
-		ShimmerTransparency = 0.3,
-		Font = "GothamMedium",
-		CornerRadius = 12,
-		Spacing = 12,
-		BackgroundImage = "",
-		LogoImage = "",
-		SpinnerImage = "",
-		TextureImage = "",
-		BlurEnabled = true,
-		BlurSize = 14,
-		SidebarColor = "#05060D",
-		CardColor = "#121628",
-		DividerColor = "#1E2438",
-		BannerA = "#2A1E7A",
-		BannerB = "#4C3BC9",
-		BannerC = "#070A12",
-	},
-	["Ice"] = {
-		Name = "Ice",
-		Mode = "light",
-		Accent = "#0F7FA8",
-		Base = "#EFF6FA",
-		PanelTransparency = 0,
-		CardTransparency = 0,
-		StrokeTransparency = 0.76,
-		StrokeThickness = 1,
-		GradientTop = "#FFFFFF",
-		GradientTopTransparency = 0.9,
-		GradientBottomTransparency = 1,
-		TextPrimary = "#0E1B22",
-		TextSecondary = "#4C6470",
-		TextDisabled = "#93A8B3",
-		DimColor = "#A7BCC6",
-		DimTransparency = 0.35,
-		ProgressTrack = "#D5E5EE",
-		ProgressFill = "#0F7FA8",
-		SkeletonBase = "#DCEAF2",
-		SkeletonHighlight = "#F2F9FC",
-		ShimmerTransparency = 0.34,
-		Font = "GothamMedium",
-		CornerRadius = 10,
-		Spacing = 12,
-		BackgroundImage = "",
-		LogoImage = "",
-		SpinnerImage = "",
-		TextureImage = "",
-		BlurEnabled = false,
-		BlurSize = 8,
-		SidebarColor = "#E4EFF6",
-		CardColor = "#FFFFFF",
-		DividerColor = "#D6E6EF",
-		BannerA = "#C3E6F5",
-		BannerB = "#BDF0E6",
-		BannerC = "#EFF6FA",
-	},
-	["Moss"] = {
-		Name = "Moss",
-		Mode = "dark",
-		Accent = "#8BD16B",
-		Base = "#0A0F0B",
-		PanelTransparency = 0,
-		CardTransparency = 0,
-		StrokeTransparency = 0.9,
-		StrokeThickness = 1,
-		GradientTop = "#FFFFFF",
-		GradientTopTransparency = 0.94,
-		GradientBottomTransparency = 1,
-		TextPrimary = "#EAF3E6",
-		TextSecondary = "#92A48C",
-		TextDisabled = "#52604E",
-		DimColor = "#050805",
-		DimTransparency = 0.4,
-		ProgressTrack = "#18211A",
-		ProgressFill = "#8BD16B",
-		SkeletonBase = "#141B15",
-		SkeletonHighlight = "#1E281F",
-		ShimmerTransparency = 0.3,
-		Font = "GothamMedium",
-		CornerRadius = 8,
-		Spacing = 12,
-		BackgroundImage = "",
-		LogoImage = "",
-		SpinnerImage = "",
-		TextureImage = "",
-		BlurEnabled = true,
-		BlurSize = 12,
-		SidebarColor = "#060A07",
-		CardColor = "#131A14",
-		DividerColor = "#1F2921",
-		BannerA = "#1D4A31",
-		BannerB = "#4E8F55",
-		BannerC = "#08110B",
-	},
-	["Sandstone"] = {
-		Name = "Sandstone",
-		Mode = "light",
-		Accent = "#A9713F",
-		Base = "#F7F1E7",
-		PanelTransparency = 0,
-		CardTransparency = 0,
-		StrokeTransparency = 0.72,
-		StrokeThickness = 1,
-		GradientTop = "#FFFFFF",
-		GradientTopTransparency = 0.9,
-		GradientBottomTransparency = 1,
-		TextPrimary = "#241C14",
-		TextSecondary = "#6E6052",
-		TextDisabled = "#A6988A",
-		DimColor = "#BCAC99",
-		DimTransparency = 0.36,
-		ProgressTrack = "#E9DFD1",
-		ProgressFill = "#A9713F",
-		SkeletonBase = "#EDE3D5",
-		SkeletonHighlight = "#FAF5EC",
-		ShimmerTransparency = 0.34,
-		Font = "GothamMedium",
-		CornerRadius = 12,
-		Spacing = 12,
-		BackgroundImage = "",
-		LogoImage = "",
-		SpinnerImage = "",
-		TextureImage = "",
-		BlurEnabled = false,
-		BlurSize = 8,
-		SidebarColor = "#F1E8DA",
-		CardColor = "#FFFDF9",
-		DividerColor = "#E5D9C8",
-		BannerA = "#EFD9B8",
-		BannerB = "#DCC7A6",
-		BannerC = "#FBF7EF",
+	Mobile = {
+		ReduceEffects = true,
+		TapTarget = 44,
+		CompactBreakpoint = 700,
 	},
 }
 
-local SKIN_ORDER = { "Sakura", "Obsidian", "Porcelain", "Ember", "Midnight", "Ice", "Moss", "Sandstone" }
+local EASING_STYLES = {
+	Linear = Enum.EasingStyle.Linear, Quad = Enum.EasingStyle.Quad, Cubic = Enum.EasingStyle.Cubic,
+	Quart = Enum.EasingStyle.Quart, Quint = Enum.EasingStyle.Quint, Sine = Enum.EasingStyle.Sine,
+	Exponential = Enum.EasingStyle.Exponential, Circular = Enum.EasingStyle.Circular,
+	Back = Enum.EasingStyle.Back, Bounce = Enum.EasingStyle.Bounce, Elastic = Enum.EasingStyle.Elastic,
+}
 
-local BUILTIN_SKINS = {}
-for _, skinName in ipairs(SKIN_ORDER) do
-	BUILTIN_SKINS[skinName] = true
+local EASING_DIRS = {
+	In = Enum.EasingDirection.In,
+	Out = Enum.EasingDirection.Out,
+	InOut = Enum.EasingDirection.InOut,
+}
+
+local State = {
+	gui = nil,
+	root = nil,
+	backdrop = nil,
+	stage = nil,
+	main = nil,
+	mainColumn = nil,
+	mainScale = nil,
+	sidebar = nil,
+	content = nil,
+	banner = nil,
+	nav = nil,
+	pagesHost = nil,
+	customize = nil,
+	customizeOpen = false,
+	player = nil,
+	playerGui = nil,
+	theme = copy(BASE_THEME),
+	destroyed = false,
+	playing = false,
+	loading = false,
+	token = 0,
+	speed = 1,
+	activeSpeed = 1,
+	mainVisible = false,
+	userHidden = false,
+	activePage = 1,
+	pages = {},
+	pageMeta = {},
+	navRows = {},
+	navIcons = {},
+	navLabels = {},
+	pageIndexById = {},
+	blur = nil,
+	modulesPage = nil,
+	modulesBuilt = false,
+	ready = false,
+	autoExecute = false,
+	moduleHost = nil,
+	moduleRefresh = {},
+	compact = nil,
+	lastViewport = Vector2.zero,
+	rebuildQueued = false,
+}
+
+local Metrics = {
+	compact = false,
+	touch = false,
+	pad = 16,
+	gap = 12,
+	row = 40,
+	button = 32,
+	input = 36,
+	nav = 32,
+	topbar = 38,
+	banner = 78,
+	corner = 12,
+	titleSize = 18,
+	bodySize = 13,
+	captionSize = 12,
+	scale = 1,
+	width = 480,
+	height = 420,
+	sidebar = 168,
+	viewport = Vector2.new(1280, 720),
+}
+
+local function computeMetrics()
+	local vp = viewport()
+	local compact = Device.mobile or vp.X < CONFIG.Mobile.CompactBreakpoint
+	local tap = CONFIG.Mobile.TapTarget
+	local metrics = {
+		viewport = vp,
+		compact = compact,
+		touch = Device.touch,
+		pad = compact and 12 or 16,
+		gap = compact and 10 or 12,
+		row = Device.touch and math.max(tap, 46) or 40,
+		button = Device.touch and math.max(tap, 40) or 32,
+		input = Device.touch and math.max(tap, 42) or 36,
+		nav = compact and 46 or 32,
+		topbar = Device.touch and 44 or 38,
+		banner = compact and 62 or 78,
+		corner = 12,
+		titleSize = compact and 19 or 18,
+		bodySize = Device.touch and 14 or 13,
+		captionSize = Device.touch and 12 or 12,
+		scale = 1,
+		width = 480,
+		height = 420,
+		sidebar = 168,
+	}
+	if not compact then
+		metrics.scale = clamp(math.min(vp.X / 760, vp.Y / 520), CONFIG.Layout.MinScale, 1)
+	end
+	local availW = vp.X / math.max(0.1, metrics.scale) - 32
+	local availH = vp.Y / math.max(0.1, metrics.scale) - 40
+	if compact then
+		metrics.width = math.floor(clamp(math.min(CONFIG.Layout.MaxWidth, vp.X - 16), 300, 640))
+		metrics.height = math.floor(clamp(vp.Y - 28, 320, 640))
+	else
+		metrics.width = math.floor(clamp(math.min(CONFIG.Layout.MaxWidth, availW), 320, CONFIG.Layout.MaxWidth))
+		metrics.height = math.floor(clamp(math.min(430, availH), 300, 430))
+	end
+	return metrics
 end
 
-local function skinNames()
-	local out = {}
-	for _, skinName in ipairs(SKIN_ORDER) do
-		if SKINS[skinName] then
-			table.insert(out, skinName)
+local Connections = {}
+local StageConnections = {}
+local TweenList = {}
+local StageTweens = {}
+local PetalTweens = {}
+local ThemeTweens = {}
+local TweenIndex = setmetatable({}, { __mode = "k" })
+
+local function connect(signal, fn)
+	local conn = signal:Connect(fn)
+	table.insert(Connections, conn)
+	return conn
+end
+
+local function connectStage(signal, fn)
+	local conn = signal:Connect(fn)
+	table.insert(StageConnections, conn)
+	return conn
+end
+
+local function ti(seconds, style, dir, repeatCount, reverses, delayTime)
+	return TweenInfo.new(
+		math.max(0.01, seconds),
+		EASING_STYLES[style] or Enum.EasingStyle.Quad,
+		EASING_DIRS[dir] or Enum.EasingDirection.Out,
+		repeatCount or 0,
+		reverses or false,
+		delayTime or 0
+	)
+end
+
+local function duration(value)
+	return value * CONFIG.Durations.Scale / math.max(0.05, State.activeSpeed)
+end
+
+local function cancelProps(target, props)
+	local index = TweenIndex[target]
+	if not index then
+		return
+	end
+	for prop in pairs(props) do
+		local existing = index[prop]
+		if existing then
+			index[prop] = nil
+			pcall(function()
+				existing:Cancel()
+			end)
 		end
 	end
-	return out
 end
 
-local function registerSkin(name, theme)
-	local cleanName = sanitizeString(tostring(name or ""), 24)
-	if cleanName == "" then
+local function playTween(target, info, props, list)
+	if State.destroyed or target == nil then
 		return nil
 	end
-	local clean = copyTable(theme or CONFIG.Theme)
-	clean.Name = cleanName
-	SKINS[cleanName] = clean
-	local known = false
-	for _, skinName in ipairs(SKIN_ORDER) do
-		if skinName == cleanName then
-			known = true
+	cancelProps(target, props)
+	local ok, tween = pcall(TweenService.Create, TweenService, target, info, props)
+	if not ok or tween == nil then
+		return nil
+	end
+	if not pcall(function()
+		tween:Play()
+	end) then
+		return nil
+	end
+	local index = TweenIndex[target]
+	if not index then
+		index = {}
+		TweenIndex[target] = index
+	end
+	for prop in pairs(props) do
+		index[prop] = tween
+	end
+	local store = list or TweenList
+	for i = #store, 1, -1 do
+		if store[i].PlaybackState ~= Enum.PlaybackState.Playing then
+			table.remove(store, i)
+		end
+	end
+	table.insert(store, tween)
+	return tween
+end
+
+local function uiTween(target, props, seconds, style, dir)
+	if target == nil then
+		return nil
+	end
+	return playTween(target, ti(duration(seconds or CONFIG.Durations.Hover), style or "Quad", dir or "Out"), props)
+end
+
+local function cancelList(list)
+	for i = #list, 1, -1 do
+		pcall(function()
+			list[i]:Cancel()
+		end)
+		table.remove(list, i)
+	end
+end
+
+local Tokens = {}
+local FONT_CACHE = {}
+local ThemeCache = {
+	list = nil,
+	animated = { Panel = true, Sidebar = true, Card = true, Surface = true, Backdrop = true, Input = true, Button = true },
+}
+
+local function themeFont()
+	local name = tostring(State.theme.Font or "")
+	local cached = FONT_CACHE[name]
+	if cached then
+		return cached
+	end
+	local ok, font = pcall(function()
+		return Enum.Font[name]
+	end)
+	font = (ok and font) or Enum.Font.GothamMedium
+	FONT_CACHE[name] = font
+	return font
+end
+
+local function boldFont()
+	local name = State.theme.Font
+	if name == "Gotham" or name == "GothamMedium" or name == "GothamBold" then
+		return Enum.Font.GothamBold
+	end
+	return themeFont()
+end
+
+local function recalcTokens(theme)
+	Tokens = {
+		accent = hex(theme.Accent),
+		base = hex(theme.Base),
+		textPrimary = hex(theme.TextPrimary),
+		textSecondary = hex(theme.TextSecondary),
+		textDisabled = hex(theme.TextDisabled),
+		onAccent = theme.Mode == "dark" and Color3.fromRGB(28, 8, 18) or Color3.new(1, 1, 1),
+		dim = hex(theme.DimColor),
+		track = hex(theme.ProgressTrack),
+		fill = hex(theme.ProgressFill),
+		skeleton = hex(theme.SkeletonBase),
+		shimmer = hex(theme.SkeletonHighlight),
+		gradientTop = hex(theme.GradientTop),
+		sidebar = hex(theme.SidebarColor or theme.Base),
+		card = hex(theme.CardColor or theme.Base),
+		divider = hex(theme.DividerColor or theme.ProgressTrack),
+		bannerA = hex(theme.BannerA or theme.Accent),
+		bannerB = hex(theme.BannerB or theme.ProgressFill),
+		bannerC = hex(theme.BannerC or theme.Base),
+	}
+	local dark = theme.Mode == "dark"
+	Tokens.button = mix(Tokens.base, Tokens.textPrimary, dark and 0.08 or 0.05)
+	Tokens.buttonHover = mix(Tokens.base, Tokens.textPrimary, dark and 0.13 or 0.09)
+	Tokens.buttonPressed = mix(Tokens.base, Tokens.textPrimary, dark and 0.18 or 0.13)
+	Tokens.accentHover = mix(Tokens.accent, Color3.new(1, 1, 1), 0.14)
+	Tokens.accentPressed = mix(Tokens.accent, Color3.new(0, 0, 0), 0.12)
+end
+
+local function tierColor(tier)
+	if tier == "Secondary" then
+		return Tokens.textSecondary
+	elseif tier == "Disabled" then
+		return Tokens.textDisabled
+	elseif tier == "Accent" then
+		return Tokens.accent
+	elseif tier == "OnAccent" then
+		return Tokens.onAccent
+	end
+	return Tokens.textPrimary
+end
+
+local function textSize(role)
+	if role == "Title" then
+		return Metrics.titleSize
+	elseif role == "Caption" then
+		return Metrics.captionSize
+	end
+	return Metrics.bodySize
+end
+
+local REBUILD = {}
+local function refreshAll()
+	for i = #REBUILD, 1, -1 do
+		local ok = pcall(REBUILD[i])
+		if not ok then
+			table.remove(REBUILD, i)
+		end
+	end
+end
+
+local function themeList()
+	if not ThemeCache.list then
+		ThemeCache.list = State.gui and State.gui:GetDescendants() or {}
+	end
+	return ThemeCache.list
+end
+
+local function strokeRole(role)
+	local th = State.theme
+	if role == "Accent" then
+		return Tokens.accent, 0.35
+	elseif role == "Focus" then
+		return Tokens.accent, 0.12
+	elseif role == "Selected" then
+		return Tokens.accent, 0.4
+	elseif role == "Plain" then
+		return Tokens.divider, 0.6
+	elseif role == "CardEdge" then
+		return Tokens.textPrimary, math.min(1, th.StrokeTransparency + 0.04)
+	elseif role == "Soft" then
+		return Tokens.textPrimary, math.min(1, th.StrokeTransparency + 0.03)
+	end
+	return Tokens.textPrimary, th.StrokeTransparency
+end
+
+local function treeGradient(role)
+	local th = State.theme
+	if role == "Header" then
+		return ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Tokens.bannerB),
+			ColorSequenceKeypoint.new(0.55, Tokens.bannerA),
+			ColorSequenceKeypoint.new(1, Tokens.base),
+		}), NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.86),
+			NumberSequenceKeypoint.new(0.55, 0.95),
+			NumberSequenceKeypoint.new(1, 1),
+		}), 16
+	elseif role == "Shimmer" then
+		return ColorSequence.new(Tokens.shimmer), NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.5, th.ShimmerTransparency),
+			NumberSequenceKeypoint.new(1, 1),
+		}), 0
+	end
+	return ColorSequence.new(Tokens.gradientTop), NumberSequence.new({
+		NumberSequenceKeypoint.new(0, th.GradientTopTransparency),
+		NumberSequenceKeypoint.new(1, th.GradientBottomTransparency),
+	}), 90
+end
+
+local function sameValue(a, b)
+	if typeof(a) ~= typeof(b) then
+		return false
+	end
+	if typeof(a) == "Color3" then
+		return math.abs(a.R - b.R) < 0.004 and math.abs(a.G - b.G) < 0.004 and math.abs(a.B - b.B) < 0.004
+	end
+	return a == b
+end
+
+local manageBlur
+
+local function applyTheme(theme, animated)
+	cancelList(ThemeTweens)
+	State.theme = copy(theme)
+	recalcTokens(State.theme)
+	if State.playing then
+		animated = false
+	end
+	if Device.mobile and CONFIG.Mobile.ReduceEffects then
+		animated = false
+	end
+	local th = State.theme
+	local info = ti(duration(CONFIG.Durations.ThemeCrossfade), CONFIG.Easing.Theme, CONFIG.Easing.ThemeDir)
+
+	local function set(inst, prop, value)
+		if animated and ThemeCache.animated[inst:GetAttribute("Role")] then
+			local ok, current = pcall(function()
+				return inst[prop]
+			end)
+			if ok and current ~= nil and sameValue(current, value) then
+				return
+			end
+			playTween(inst, info, { [prop] = value }, ThemeTweens)
+		else
+			inst[prop] = value
+		end
+	end
+
+	for _, d in ipairs(themeList()) do
+		local role = d:GetAttribute("Role")
+		if d:IsA("UIStroke") then
+			local color, alpha = strokeRole(role)
+			d.Color = color
+			d.Transparency = alpha
+			d.Thickness = math.max(1, th.StrokeThickness)
+		elseif d:IsA("UIGradient") then
+			local colors, transparency, rotation = treeGradient(role)
+			d.Color = colors
+			d.Transparency = transparency
+			d.Rotation = rotation
+		elseif d:IsA("UICorner") then
+			local radius = th.CornerRadius
+			if role == "Small" then
+				radius = math.min(radius, 8)
+			elseif role == "Dot" then
+				radius = 999
+			end
+			d.CornerRadius = UDim.new(0, radius)
+		elseif d:IsA("UIListLayout") then
+			if role == "Gap" then
+				d.Padding = UDim.new(0, th.Spacing)
+			end
+		elseif d:IsA("UIPadding") then
+			if role == "Pad" then
+				local pad = UDim.new(0, th.Spacing)
+				d.PaddingTop, d.PaddingBottom, d.PaddingLeft, d.PaddingRight = pad, pad, pad, pad
+			end
+		elseif d:IsA("Frame") or d:IsA("TextButton") or d:IsA("TextLabel") or d:IsA("TextBox") or d:IsA("ImageLabel") or d:IsA("ImageButton") then
+			if role == "Panel" then
+				set(d, "BackgroundColor3", Tokens.base)
+				set(d, "BackgroundTransparency", th.PanelTransparency)
+			elseif role == "Sidebar" then
+				set(d, "BackgroundColor3", Tokens.sidebar)
+			elseif role == "Card" then
+				set(d, "BackgroundColor3", Tokens.card)
+				set(d, "BackgroundTransparency", th.CardTransparency)
+			elseif role == "Button" then
+				set(d, "BackgroundColor3", Tokens.button)
+			elseif role == "Ghost" then
+				set(d, "BackgroundColor3", Tokens.button)
+			elseif role == "Input" then
+				set(d, "BackgroundColor3", Tokens.base)
+			elseif role == "Divider" then
+				set(d, "BackgroundColor3", Tokens.divider)
+			elseif role == "SliderKnob" then
+				set(d, "BackgroundColor3", Tokens.textPrimary)
+			elseif role == "Backdrop" then
+				local level = d:GetAttribute("BackdropLevel")
+				if level == "loading" then
+					set(d, "BackgroundColor3", hex(CONFIG.Loading.BackdropColor))
+					set(d, "BackgroundTransparency", CONFIG.Loading.BackdropTransparency)
+				elseif level == "modal" then
+					set(d, "BackgroundColor3", Tokens.dim)
+					set(d, "BackgroundTransparency", th.DimTransparency)
+				else
+					set(d, "BackgroundColor3", Tokens.dim)
+				end
+			elseif role == "Accent" then
+				set(d, "BackgroundColor3", Tokens.accent)
+			elseif role == "Track" then
+				set(d, "BackgroundColor3", Tokens.track)
+			elseif role == "Fill" then
+				set(d, "BackgroundColor3", Tokens.fill)
+			elseif role == "Skeleton" then
+				set(d, "BackgroundColor3", Tokens.skeleton)
+			elseif role == "Surface" then
+				set(d, "BackgroundColor3", Tokens.base)
+			end
+		end
+
+		if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+			d.Font = d:GetAttribute("Bold") == true and boldFont() or themeFont()
+			if d:GetAttribute("FixedSize") ~= true then
+				d.TextSize = textSize(d:GetAttribute("TextRole"))
+			end
+			d.TextColor3 = tierColor(d:GetAttribute("Tier") or "Primary")
+			if d:IsA("TextBox") then
+				d.PlaceholderColor3 = Tokens.textSecondary
+			end
+		end
+
+		if d:IsA("ImageLabel") or d:IsA("ImageButton") then
+			local image = d:GetAttribute("ImageRole")
+			if image == "Background" and th.BackgroundImage ~= "" then
+				d.Image = "rbxassetid://" .. th.BackgroundImage
+			elseif image == "Logo" and th.LogoImage ~= "" then
+				d.Image = "rbxassetid://" .. th.LogoImage
+			elseif image == "Spinner" and th.SpinnerImage ~= "" then
+				d.Image = "rbxassetid://" .. th.SpinnerImage
+			elseif image == "Texture" and th.TextureImage ~= "" then
+				d.Image = "rbxassetid://" .. th.TextureImage
+			end
+		end
+	end
+
+	manageBlur()
+	refreshAll()
+end
+
+local function new(className, props, parent)
+	local inst = Instance.new(className)
+	if props then
+		local role, tier, textRole, imageRole
+		for key, value in pairs(props) do
+			if key == "Role" then
+				role = value
+			elseif key == "Tier" then
+				tier = value
+			elseif key == "TextRole" then
+				textRole = value
+			elseif key == "ImageRole" then
+				imageRole = value
+			elseif key ~= "Parent" then
+				inst[key] = value
+			end
+		end
+		if role then
+			inst:SetAttribute("Role", role)
+		end
+		if tier then
+			inst:SetAttribute("Tier", tier)
+		end
+		if textRole then
+			inst:SetAttribute("TextRole", textRole)
+		end
+		if imageRole then
+			inst:SetAttribute("ImageRole", imageRole)
+		end
+	end
+	if parent then
+		inst.Parent = parent
+	end
+	ThemeCache.list = nil
+	return inst
+end
+
+manageBlur = function()
+	local seeThrough = (tonumber(CONFIG.Loading.BackdropTransparency) or 0) > 0.45
+	local wanted = State.theme.BlurEnabled and State.loading and seeThrough
+	if Device.mobile and CONFIG.Mobile.ReduceEffects then
+		wanted = false
+	end
+	if wanted then
+		if not State.blur then
+			State.blur = new("BlurEffect", { Name = "BlossomBlur", Size = 0, Enabled = true }, Lighting)
+		end
+		playTween(State.blur, ti(duration(CONFIG.Durations.Fade), "Quad", "Out"), { Size = State.theme.BlurSize })
+	elseif State.blur then
+		local blur = State.blur
+		playTween(blur, ti(duration(CONFIG.Durations.Fade), "Quad", "In"), { Size = 0 })
+		task.delay(duration(CONFIG.Durations.Fade) + 0.1, function()
+			if State.blur == blur then
+				blur:Destroy()
+				State.blur = nil
+			end
+		end)
+	end
+end
+local toast
+local setStatusLabel
+local openCustomize, closeCustomize
+local playGallery, captureShot, toggleDebug
+local showMain, hideMain
+local saveProfile, loadProfile, applyVisibility
+
+local function addRule(row, inset)
+	local pad = tonumber(inset) or 10
+	return new("Frame", {
+		Name = "Rule",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, pad, 1, 0),
+		Size = UDim2.new(1, -pad * 2, 0, 1),
+		BackgroundColor3 = Tokens.divider,
+		BackgroundTransparency = 0.5,
+		BorderSizePixel = 0,
+		Role = "Divider",
+	}, row)
+end
+
+local function makeLabel(parent, opts)
+	opts = opts or {}
+	local role = opts.TextRole
+	local label = new("TextLabel", {
+		Name = opts.Name or "Label",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = opts.Size or UDim2.new(1, 0, 0, textSize(role) + 6),
+		Position = opts.Position,
+		AnchorPoint = opts.AnchorPoint,
+		Text = opts.Text or "",
+		Font = opts.Bold and boldFont() or themeFont(),
+		TextSize = opts.TextSize or textSize(role),
+		TextColor3 = opts.Color or tierColor(opts.Tier or "Primary"),
+		TextXAlignment = opts.XAlign or Enum.TextXAlignment.Left,
+		TextYAlignment = opts.YAlign or Enum.TextYAlignment.Center,
+		TextWrapped = opts.Wrapped == true,
+		TextTruncate = opts.Truncate and Enum.TextTruncate.AtEnd or Enum.TextTruncate.None,
+		LayoutOrder = opts.Order or 0,
+		Visible = opts.Visible ~= false,
+		ZIndex = opts.ZIndex or 1,
+		Tier = opts.Tier or "Primary",
+		TextRole = role,
+	}, parent)
+	if opts.Bold then
+		label:SetAttribute("Bold", true)
+	end
+	if opts.FixedSize then
+		label:SetAttribute("FixedSize", true)
+	end
+	return label
+end
+
+local function makeCard(parent, opts)
+	opts = opts or {}
+	local card = new("Frame", {
+		Name = opts.Name or "Card",
+		BackgroundColor3 = Tokens.card,
+		BackgroundTransparency = State.theme.CardTransparency,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = opts.Order or 0,
+		Role = "Card",
+	}, parent)
+	new("UICorner", { CornerRadius = UDim.new(0, math.min(State.theme.CornerRadius, 8)), Role = "Small" }, card)
+	new("UIStroke", {
+		Color = Tokens.textPrimary,
+		Transparency = math.min(1, State.theme.StrokeTransparency + 0.04),
+		Thickness = 1,
+		Role = "CardEdge",
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+	}, card)
+	new("UIPadding", {
+		PaddingTop = UDim.new(0, 6),
+		PaddingBottom = UDim.new(0, 6),
+		PaddingLeft = UDim.new(0, 6),
+		PaddingRight = UDim.new(0, 6),
+	}, card)
+	new("UIListLayout", {
+		Padding = UDim.new(0, 0),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		FillDirection = Enum.FillDirection.Vertical,
+	}, card)
+	if opts.Title then
+		makeLabel(card, {
+			Name = "CardTitle",
+			Text = clean(tostring(opts.Title), 40),
+			Tier = "Secondary",
+			TextRole = "Caption",
+			Bold = true,
+			FixedSize = true,
+			LayoutOrder = -10,
+			Size = UDim2.new(1, -12, 0, 26),
+		})
+	end
+	return card
+end
+
+local function makeButton(parent, opts)
+	opts = opts or {}
+	local variant = opts.Variant or "Default"
+	local primary = variant == "Primary"
+	local ghost = variant == "Ghost"
+	local radius = tonumber(opts.Radius) or math.max(4, Metrics.corner - 4)
+	local labelSize = tonumber(opts.TextSize) or Metrics.bodySize
+	local button = new("TextButton", {
+		Name = opts.Name or "Button",
+		AutoButtonColor = false,
+		Selectable = true,
+		BackgroundColor3 = primary and Tokens.accent or Tokens.button,
+		BackgroundTransparency = ghost and 0.94 or 0,
+		BorderSizePixel = 0,
+		Size = opts.Size or UDim2.new(1, 0, 0, Metrics.button),
+		Position = opts.Position,
+		AnchorPoint = opts.AnchorPoint,
+		Text = clean(tostring(opts.Text or "Button"), 64),
+		Font = opts.Bold and boldFont() or themeFont(),
+		TextSize = labelSize,
+		TextColor3 = primary and Tokens.onAccent or Tokens.textPrimary,
+		TextXAlignment = opts.XAlign or Enum.TextXAlignment.Center,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		LayoutOrder = opts.Order or 0,
+		ZIndex = opts.ZIndex or 1,
+		Role = primary and "Accent" or (ghost and "Ghost" or "Button"),
+		Tier = primary and "OnAccent" or "Primary",
+		TextRole = "Body",
+	}, parent)
+	new("UICorner", { CornerRadius = UDim.new(0, radius), Role = "Small" }, button)
+
+	local state = {
+		enabled = opts.Enabled ~= false,
+		hover = false,
+		pressed = false,
+		active = opts.Active == true,
+		busy = false,
+		last = 0,
+	}
+
+	local function faceColor()
+		if primary or state.active then
+			if state.pressed and state.enabled then
+				return Tokens.accentPressed
+			end
+			if state.hover and state.enabled then
+				return Tokens.accentHover
+			end
+			return Tokens.accent
+		end
+		if state.pressed and state.enabled then
+			return Tokens.buttonPressed
+		end
+		if state.hover and state.enabled then
+			return Tokens.buttonHover
+		end
+		return Tokens.button
+	end
+
+	local function faceAlpha()
+		if not state.enabled then
+			return ghost and 1 or 0.55
+		end
+		if state.active then
+			return 0
+		end
+		if ghost then
+			return (state.hover or state.pressed) and 0.88 or 0.94
+		end
+		return 0
+	end
+
+	local function textColor()
+		if not state.enabled then
+			return Tokens.textDisabled
+		end
+		if primary or state.active then
+			return Tokens.onAccent
+		end
+		return Tokens.textPrimary
+	end
+
+	local function refresh()
+		button.BackgroundColor3 = faceColor()
+		button.BackgroundTransparency = faceAlpha()
+		button.TextColor3 = textColor()
+		button.Font = opts.Bold and boldFont() or themeFont()
+		button.TextSize = labelSize
+	end
+
+	local function paint(seconds, style, dir)
+		uiTween(button, {
+			BackgroundColor3 = faceColor(),
+			BackgroundTransparency = faceAlpha(),
+		}, seconds, style, dir)
+	end
+
+	if Device.hover then
+		connect(button.MouseEnter, function()
+			if not state.enabled or state.hover then
+				return
+			end
+			state.hover = true
+			paint(CONFIG.Durations.Hover * 0.6, CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
+		end)
+		connect(button.MouseLeave, function()
+			if not state.hover and not state.pressed then
+				return
+			end
+			state.hover = false
+			state.pressed = false
+			paint(CONFIG.Durations.Hover * 1.25, CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
+		end)
+	end
+	connect(button.MouseButton1Down, function()
+		if not state.enabled or state.busy or state.pressed then
+			return
+		end
+		state.pressed = true
+		paint(CONFIG.Durations.Press * 0.6, CONFIG.Easing.Press, CONFIG.Easing.PressDir)
+	end)
+	connect(button.MouseButton1Up, function()
+		if not state.pressed then
+			return
+		end
+		state.pressed = false
+		paint(CONFIG.Durations.Hover * 0.6, CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
+	end)
+
+	if opts.Divider then
+		addRule(button)
+	end
+
+	local comp = { Instance = button }
+
+	function comp:SetEnabled(value)
+		state.enabled = value == true
+		button.Active = state.enabled and not state.busy
+		button.Selectable = state.enabled
+		refresh()
+	end
+
+	function comp:SetBusy(value)
+		state.busy = value == true
+		button.TextTransparency = state.busy and 0.45 or 0
+		button.Active = state.enabled and not state.busy
+	end
+
+	function comp:SetActive(value)
+		state.active = value == true
+		if not primary then
+			button:SetAttribute("Tier", state.active and "OnAccent" or "Primary")
+		end
+		refresh()
+	end
+
+	function comp:SetText(value)
+		button.Text = clean(tostring(value or ""), 64)
+	end
+
+	function comp:Get()
+		return state.active
+	end
+
+	function comp:Bind(fn)
+		connect(button.MouseButton1Click, function()
+			if not state.enabled or state.busy then
+				return
+			end
+			local now = os.clock()
+			if now - state.last < 0.18 then
+				return
+			end
+			state.last = now
+			local ok, err = safeCall(fn, comp)
+			if not ok then
+				warn("[Blossom] button callback failed: " .. tostring(err))
+				if toast then
+					toast("Action failed", true)
+				end
+			end
+		end)
+	end
+
+	function comp:Run(fn)
+		if not state.enabled or state.busy then
+			return
+		end
+		local now = os.clock()
+		if now - state.last < 0.18 then
+			return
+		end
+		state.last = now
+		self:SetBusy(true)
+		task.spawn(function()
+			local ok, err = safeCall(fn, comp)
+			if not State.destroyed then
+				self:SetBusy(false)
+			end
+			if not ok then
+				warn("[Blossom] button action failed: " .. tostring(err))
+				if toast then
+					toast("Action failed", true)
+				end
+			end
+		end)
+	end
+
+	table.insert(REBUILD, refresh)
+	return comp
+end
+
+local function makeToggle(parent, opts)
+	opts = opts or {}
+	local pillW, pillH, knobSize = 40, 22, 18
+	if not Device.touch then
+		pillW, pillH, knobSize = 34, 18, 14
+	end
+	local knobOff = math.floor((pillH - knobSize) / 2)
+	local knobOn = pillW - knobSize - knobOff
+
+	local row = new("TextButton", {
+		Name = "Toggle",
+		AutoButtonColor = false,
+		Selectable = true,
+		Text = "",
+		BackgroundColor3 = Tokens.button,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = opts.Size or UDim2.new(1, 0, 0, Metrics.row),
+		LayoutOrder = opts.Order or 0,
+		Role = "Ghost",
+		ZIndex = 2,
+	}, parent)
+	new("UICorner", { CornerRadius = UDim.new(0, 6), Role = "Small" }, row)
+	makeLabel(row, {
+		Name = "Label",
+		Text = clean(tostring(opts.Text or "Toggle"), 60),
+		Tier = "Primary",
+		TextRole = "Body",
+		Position = UDim2.new(0, 10, 0, 0),
+		Size = UDim2.new(1, -(pillW + 34), 1, 0),
+		Truncate = true,
+		ZIndex = 3,
+	})
+	local pill = new("Frame", {
+		Name = "Switch",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -12, 0.5, 0),
+		Size = UDim2.new(0, pillW, 0, pillH),
+		BackgroundColor3 = Tokens.track,
+		BorderSizePixel = 0,
+		ZIndex = 3,
+	}, row)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, pill)
+	new("UIStroke", {
+		Color = Tokens.textPrimary,
+		Transparency = 0.88,
+		Thickness = 1,
+		Role = "Soft",
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+	}, pill)
+	local knob = new("Frame", {
+		Name = "Knob",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, knobOff, 0.5, 0),
+		Size = UDim2.new(0, knobSize, 0, knobSize),
+		BackgroundColor3 = Tokens.textSecondary,
+		BorderSizePixel = 0,
+		ZIndex = 4,
+	}, pill)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, knob)
+
+	local state = {
+		value = opts.Value == true,
+		enabled = opts.Enabled ~= false,
+	}
+
+	local function trackColor()
+		if not state.enabled then
+			return Tokens.track
+		end
+		return state.value and Tokens.accent or Tokens.track
+	end
+
+	local function knobColor()
+		if not state.enabled then
+			return Tokens.textDisabled
+		end
+		return state.value and Color3.new(1, 1, 1) or Tokens.textSecondary
+	end
+
+	local function knobPos()
+		return UDim2.new(0, state.value and knobOn or knobOff, 0.5, 0)
+	end
+
+	local function paint(animated)
+		if animated == false or Device.mobile then
+			pill.BackgroundColor3 = trackColor()
+			knob.BackgroundColor3 = knobColor()
+			knob.Position = knobPos()
+			return
+		end
+		uiTween(pill, { BackgroundColor3 = trackColor() }, CONFIG.Durations.Toggle, "Quad", "Out")
+		uiTween(knob, { BackgroundColor3 = knobColor() }, CONFIG.Durations.Toggle, "Quad", "Out")
+		uiTween(knob, { Position = knobPos() }, CONFIG.Durations.Toggle, "Quint", "Out")
+	end
+
+	local function refresh()
+		pill.BackgroundColor3 = trackColor()
+		knob.BackgroundColor3 = knobColor()
+		knob.Position = knobPos()
+		row.BackgroundColor3 = Tokens.button
+	end
+
+	connect(row.MouseButton1Click, function()
+		if not state.enabled then
+			return
+		end
+		state.value = not state.value
+		paint(true)
+		if opts.OnChange then
+			local ok, err = safeCall(opts.OnChange, state.value)
+			if not ok then
+				warn("[Blossom] toggle callback failed: " .. tostring(err))
+			end
+		end
+	end)
+	if Device.hover then
+		connect(row.MouseEnter, function()
+			uiTween(row, { BackgroundTransparency = 0.94 }, CONFIG.Durations.Hover, "Quad", "Out")
+		end)
+		connect(row.MouseLeave, function()
+			uiTween(row, { BackgroundTransparency = 1 }, CONFIG.Durations.Hover, "Quad", "Out")
+		end)
+	end
+
+	if opts.Divider ~= false then
+		addRule(row)
+	end
+
+	local comp = { Instance = row }
+	function comp:Set(value)
+		state.value = value == true
+		paint(false)
+	end
+	function comp:Get()
+		return state.value
+	end
+	function comp:SetEnabled(value)
+		state.enabled = value == true
+		paint(false)
+	end
+	table.insert(REBUILD, refresh)
+	return comp
+end
+
+local function makeSlider(parent, opts)
+	opts = opts or {}
+	local minV = tonumber(opts.Min) or 0
+	local maxV = tonumber(opts.Max) or 1
+	if maxV < minV then
+		minV, maxV = maxV, minV
+	end
+	local step = tonumber(opts.Step)
+	if not step or step <= 0 then
+		step = math.max((maxV - minV) / 50, 0.0001)
+	end
+	local wrap = new("Frame", {
+		Name = "Slider",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = opts.Size or UDim2.new(1, 0, 0, Device.touch and 66 or 56),
+		LayoutOrder = opts.Order or 0,
+	}, parent)
+	wrap:SetAttribute("NoDrag", true)
+	local header = new("Frame", {
+		Name = "Header",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, 10, 0, 6),
+		Size = UDim2.new(1, -20, 0, 22),
+	}, wrap)
+	makeLabel(header, {
+		Name = "Label",
+		Text = clean(tostring(opts.Label or "Slider"), 48),
+		Tier = "Primary",
+		TextRole = "Body",
+		Size = UDim2.new(1, -70, 1, 0),
+		Truncate = true,
+	})
+	local valueLabel = makeLabel(header, {
+		Name = "Value",
+		Text = "",
+		Tier = "Secondary",
+		TextRole = "Caption",
+		XAlign = Enum.TextXAlignment.Right,
+		Size = UDim2.new(0, 64, 1, 0),
+		Position = UDim2.new(1, -64, 0, 0),
+	})
+	local track = new("Frame", {
+		Name = "Track",
+		Position = UDim2.new(0, 10, 0, Device.touch and 46 or 40),
+		Size = UDim2.new(1, -20, 0, 4),
+		BackgroundColor3 = Tokens.track,
+		BorderSizePixel = 0,
+		Role = "Track",
+	}, wrap)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, track)
+	local fill = new("Frame", {
+		Name = "Fill",
+		Size = UDim2.new(0, 0, 1, 0),
+		BackgroundColor3 = Tokens.fill,
+		BorderSizePixel = 0,
+		Role = "Fill",
+	}, track)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, fill)
+	local knobSize = Device.touch and 18 or 12
+	local hit = new("Frame", {
+		Name = "Hit",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 0, 0.5, 0),
+		Size = UDim2.new(1, 0, 0, Device.touch and 40 or 24),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+	}, track)
+	hit:SetAttribute("NoDrag", true)
+	local knob = new("Frame", {
+		Name = "Knob",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0, 0, 0.5, 0),
+		Size = UDim2.new(0, knobSize, 0, knobSize),
+		BackgroundColor3 = Tokens.textPrimary,
+		BorderSizePixel = 0,
+		Role = "SliderKnob",
+	}, track)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, knob)
+
+	local state = {
+		value = clamp(tonumber(opts.Value) or minV, minV, maxV),
+		dragging = false,
+		offset = 0,
+	}
+
+	local function snap(value)
+		return clamp(minV + math.floor((value - minV) / step + 0.5) * step, minV, maxV)
+	end
+
+	local function alphaOf(value)
+		return maxV - minV <= 0 and 0 or (value - minV) / (maxV - minV)
+	end
+
+	local function formatValue(value)
+		if type(opts.Format) == "function" then
+			local ok, text = safeCall(opts.Format, value)
+			if ok and text ~= nil then
+				return clean(tostring(text), 16)
+			end
+		end
+		local places = step >= 1 and 0 or (step >= 0.1 and 1 or 2)
+		return string.format("%." .. places .. "f", value)
+	end
+
+	local function place(animated)
+		local alpha = alphaOf(state.value)
+		if animated and not Device.mobile then
+			uiTween(fill, { Size = UDim2.new(alpha, 0, 1, 0) }, CONFIG.Durations.Hover, CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
+			uiTween(knob, { Position = UDim2.new(alpha, 0, 0.5, 0) }, CONFIG.Durations.Hover, CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
+		else
+			fill.Size = UDim2.new(alpha, 0, 1, 0)
+			knob.Position = UDim2.new(alpha, 0, 0.5, 0)
+		end
+		valueLabel.Text = formatValue(state.value)
+	end
+
+	local function commit(value, animated, raw)
+		local nextValue = raw and clamp(value, minV, maxV) or snap(clamp(value, minV, maxV))
+		local changed = nextValue ~= state.value
+		state.value = nextValue
+		place(animated)
+		if changed and opts.OnChange then
+			local ok, err = safeCall(opts.OnChange, state.value)
+			if not ok then
+				warn("[Blossom] slider callback failed: " .. tostring(err))
+			end
+		end
+	end
+
+	local function valueFromInput(input)
+		local width = track.AbsoluteSize.X
+		if width <= 0 then
+			return state.value
+		end
+		local alpha = clamp((input.Position.X - track.AbsolutePosition.X) / width, 0, 1)
+		return minV + alpha * (maxV - minV)
+	end
+
+	local function inRect(obj, point, padY)
+		local ap, as = obj.AbsolutePosition, obj.AbsoluteSize
+		local pad = padY or 0
+		return point.X >= ap.X and point.X <= ap.X + as.X and point.Y >= ap.Y - pad and point.Y <= ap.Y + as.Y + pad
+	end
+
+	local function visibleOnScreen()
+		local node = wrap
+		while node and node ~= State.gui do
+			if node:IsA("GuiObject") and node.Visible ~= true then
+				return false
+			end
+			node = node.Parent
+		end
+		return true
+	end
+
+	connect(UserInputService.InputBegan, function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		if State.customizeOpen or not visibleOnScreen() then
+			return
+		end
+		local point = Vector2.new(input.Position.X, input.Position.Y)
+		if not inRect(hit, point, 8) then
+			return
+		end
+		local fromKnob = inRect(knob, point, 6)
+		state.offset = fromKnob and (state.value - valueFromInput(input)) or 0
+		state.dragging = true
+		if not fromKnob then
+			commit(valueFromInput(input), false, true)
+		end
+	end)
+	connect(UserInputService.InputChanged, function(input)
+		if not state.dragging then
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+				state.dragging = false
+				state.offset = 0
+				commit(state.value, true)
+				return
+			end
+		elseif input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		commit(valueFromInput(input) + state.offset, false, true)
+	end)
+	connect(UserInputService.InputEnded, function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		if not state.dragging then
+			return
+		end
+		state.dragging = false
+		state.offset = 0
+		commit(state.value, true)
+	end)
+	if Device.hover then
+		connect(hit.MouseEnter, function()
+			uiTween(knob, { Size = UDim2.new(0, knobSize + 3, 0, knobSize + 3) }, CONFIG.Durations.Hover, "Quad", "Out")
+		end)
+		connect(hit.MouseLeave, function()
+			if state.dragging then
+				return
+			end
+			uiTween(knob, { Size = UDim2.new(0, knobSize, 0, knobSize) }, CONFIG.Durations.Hover, "Quad", "Out")
+		end)
+	end
+
+	local function refresh()
+		track.BackgroundColor3 = Tokens.track
+		fill.BackgroundColor3 = Tokens.accent
+		knob.BackgroundColor3 = Tokens.textPrimary
+		valueLabel.TextColor3 = Tokens.textSecondary
+	end
+
+	local comp = { Instance = wrap }
+	function comp:Set(value)
+		commit(tonumber(value) or state.value, false)
+	end
+	function comp:Get()
+		return state.value
+	end
+	table.insert(REBUILD, refresh)
+	place(false)
+	if opts.Divider ~= false then
+		addRule(wrap)
+	end
+	return comp
+end
+
+local function makeInput(parent, opts)
+	opts = opts or {}
+	local wrap = new("Frame", {
+		Name = "Input",
+		BackgroundColor3 = Tokens.base,
+		BorderSizePixel = 0,
+		Size = opts.Size or UDim2.new(1, 0, 0, Metrics.input),
+		LayoutOrder = opts.Order or 0,
+		Role = "Input",
+	}, parent)
+	new("UICorner", { CornerRadius = UDim.new(0, math.max(4, Metrics.corner - 4)), Role = "Small" }, wrap)
+	local stroke = new("UIStroke", {
+		Color = Tokens.textPrimary,
+		Transparency = State.theme.StrokeTransparency,
+		Thickness = 1,
+		Role = "Edge",
+	}, wrap)
+	local box = new("TextBox", {
+		Name = "Box",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, 10, 0, 0),
+		Size = UDim2.new(1, -20, 1, 0),
+		Text = opts.Text or "",
+		PlaceholderText = clean(tostring(opts.Placeholder or ""), 80),
+		Font = themeFont(),
+		TextSize = Metrics.bodySize,
+		TextColor3 = Tokens.textPrimary,
+		PlaceholderColor3 = Tokens.textSecondary,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ClearTextOnFocus = false,
+		Tier = "Primary",
+		TextRole = "Body",
+	}, wrap)
+
+	connect(box.Focused, function()
+		playTween(stroke, ti(duration(CONFIG.Durations.Hover), "Quad", "Out"), {
+			Color = Tokens.accent,
+			Transparency = 0.25,
+		})
+	end)
+	connect(box.FocusLost, function(enterPressed)
+		playTween(stroke, ti(duration(CONFIG.Durations.Hover), "Quad", "Out"), {
+			Color = Tokens.textPrimary,
+			Transparency = State.theme.StrokeTransparency,
+		})
+		if enterPressed and opts.OnSubmit then
+			local ok, err = safeCall(opts.OnSubmit, box.Text)
+			if not ok then
+				warn("[Blossom] input callback failed: " .. tostring(err))
+			end
+		end
+	end)
+
+	local comp = { Instance = wrap, Box = box }
+	function comp:GetText()
+		return box.Text
+	end
+	function comp:SetText(value)
+		box.Text = clean(tostring(value or ""), 400)
+	end
+	table.insert(REBUILD, function()
+		box.TextColor3 = Tokens.textPrimary
+		box.PlaceholderColor3 = Tokens.textSecondary
+		box.Font = themeFont()
+		box.TextSize = Metrics.bodySize
+		wrap.BackgroundColor3 = Tokens.base
+	end)
+	return comp
+end
+
+local function makeRow(parent, opts)
+	opts = opts or {}
+	local width = tonumber(opts.ControlWidth) or 160
+	local row = new("Frame", {
+		Name = "Row",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = opts.Size or UDim2.new(1, 0, 0, tonumber(opts.Height) or Metrics.row),
+		LayoutOrder = opts.Order or 0,
+	}, parent)
+	makeLabel(row, {
+		Name = "Label",
+		Text = clean(tostring(opts.Label or ""), 48),
+		Tier = "Primary",
+		TextRole = "Body",
+		Position = UDim2.new(0, 10, 0, 0),
+		Size = UDim2.new(1, -(width + 24), 1, 0),
+		Truncate = true,
+	})
+	if type(opts.Build) == "function" then
+		local ok, err = safeCall(opts.Build, row)
+		if not ok then
+			warn("[Blossom] row build failed: " .. tostring(err))
+		end
+	end
+	if opts.Divider ~= false then
+		addRule(row)
+	end
+	return row
+end
+
+local function makeListRow(parent, opts)
+	opts = opts or {}
+	local row = new("Frame", {
+		Name = "ListRow",
+		BackgroundColor3 = Tokens.button,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 0, 50),
+		LayoutOrder = opts.Order or 0,
+		Role = "Ghost",
+	}, parent)
+	makeLabel(row, {
+		Name = "Title",
+		Text = clean(tostring(opts.Title or "Row"), 40),
+		Tier = "Primary",
+		TextRole = "Body",
+		Position = UDim2.new(0, 10, 0, 6),
+		Size = UDim2.new(1, -20, 0, 20),
+		Truncate = true,
+	})
+	makeLabel(row, {
+		Name = "Subtitle",
+		Text = clean(tostring(opts.Subtitle or ""), 80),
+		Tier = "Secondary",
+		TextRole = "Caption",
+		Position = UDim2.new(0, 10, 0, 26),
+		Size = UDim2.new(1, -20, 0, 18),
+		Truncate = true,
+	})
+	if opts.Divider ~= false then
+		addRule(row)
+	end
+	return { Instance = row }
+end
+
+local function makeIcon(parent, kind)
+	local box = new("Frame", {
+		Name = "Icon",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 12, 0.5, 0),
+		Size = UDim2.new(0, 16, 0, 16),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 3,
+	}, parent)
+	local function shape(cx, cy, w, h, rot, radius, filled)
+		local part = new("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0, cx, 0, cy),
+			Size = UDim2.new(0, w, 0, h),
+			BackgroundColor3 = Tokens.textDisabled,
+			BackgroundTransparency = filled and 0 or 1,
+			BorderSizePixel = 0,
+			Rotation = rot or 0,
+			ZIndex = 3,
+		}, box)
+		new("UICorner", { CornerRadius = UDim.new(0, radius or 1) }, part)
+		if not filled then
+			new("UIStroke", { Color = Tokens.textDisabled, Transparency = 0, Thickness = 1.6 }, part)
+		end
+		return part
+	end
+	if kind == "sliders" then
+		shape(8, 5, 13, 2, 0, 1, true)
+		shape(8, 11, 13, 2, 0, 1, true)
+		shape(5, 5, 5, 5, 0, 2.5, true)
+		shape(11, 11, 5, 5, 0, 2.5, true)
+	elseif kind == "diamond" then
+		shape(8, 8, 8, 8, 45, 2, true)
+	elseif kind == "ring" then
+		shape(8, 8, 12, 12, 0, 6, false)
+		shape(8, 4.2, 4, 4, 0, 2, true)
+	elseif kind == "cog" then
+		shape(8, 8, 11, 11, 0, 5.5, false)
+		shape(8, 1.7, 2, 3, 0, 1, true)
+		shape(8, 14.3, 2, 3, 0, 1, true)
+		shape(1.7, 8, 3, 2, 0, 1, true)
+		shape(14.3, 8, 3, 2, 0, 1, true)
+	elseif kind == "camera" then
+		shape(8, 9.5, 14, 9, 0, 3, false)
+		shape(8, 3.6, 5, 3, 0, 1.5, true)
+		shape(8, 9.5, 4.5, 4.5, 0, 2.25, false)
+	elseif kind == "home" then
+		shape(8, 10.6, 10, 7.5, 0, 2, false)
+		shape(5.2, 4.9, 6.6, 2.2, -40, 1.1, true)
+		shape(10.8, 4.9, 6.6, 2.2, 40, 1.1, true)
+	elseif kind == "list" then
+		shape(8, 4, 13, 2, 0, 1, true)
+		shape(8, 8, 13, 2, 0, 1, true)
+		shape(5.5, 12, 8, 2, 0, 1, true)
+	else
+		shape(4.5, 4.5, 6, 6, 0, 2, true)
+		shape(11.5, 4.5, 6, 6, 0, 2, true)
+		shape(4.5, 11.5, 6, 6, 0, 2, true)
+		shape(11.5, 11.5, 6, 6, 0, 2, true)
+	end
+	return box
+end
+
+local function tintIcon(box, color, animated)
+	if not box then
+		return
+	end
+	local info = ti(duration(CONFIG.Durations.Hover), "Quad", "Out")
+	for _, child in ipairs(box:GetChildren()) do
+		if child:IsA("Frame") then
+			local stroke = child:FindFirstChildOfClass("UIStroke")
+			if stroke then
+				if animated and not Device.mobile then
+					playTween(stroke, info, { Color = color })
+				else
+					stroke.Color = color
+				end
+			elseif animated and not Device.mobile then
+				playTween(child, info, { BackgroundColor3 = color })
+			else
+				child.BackgroundColor3 = color
+			end
+		end
+	end
+end
+local CONTROL_TYPES = { Button = true, Toggle = true, Slider = true, Input = true }
+local buildModulePage
+local runModule, stopModule
+
+local function recordModuleError(id, message)
+	table.insert(Blossom.ModuleErrors, {
+		Id = tostring(id or "?"),
+		Message = tostring(message),
+		Time = os.clock(),
+	})
+	warn("[Blossom] module " .. tostring(id) .. ": " .. tostring(message))
+end
+
+local function moduleContext(module)
+	return {
+		Module = module,
+		Config = CONFIG,
+		Blossom = Blossom,
+		Toast = function(text, isError)
+			if toast then
+				toast(text, isError)
+			end
+		end,
+		Log = function(...)
+			print("[Blossom/" .. module.Id .. "]", ...)
+		end,
+		IsRunning = function()
+			return module.Running == true
+		end,
+		SetStatus = function(text)
+			module.Status = clean(tostring(text or ""), 40)
+			if module.Refresh then
+				safeCall(module.Refresh)
+			end
+		end,
+	}
+end
+
+local function sanitizeModule(spec)
+	if type(spec) ~= "table" then
+		return nil, "module must be a table"
+	end
+	local id = clean(tostring(spec.Id or spec.id or ""), 32)
+	if id == "" then
+		return nil, "module Id is required"
+	end
+	if not id:match("^[%w_%-]+$") then
+		return nil, "module Id may only use letters, numbers, _ and -"
+	end
+	if Blossom.ModuleById[id] then
+		return nil, "duplicate module Id '" .. id .. "'"
+	end
+	local controls = {}
+	if spec.Controls ~= nil then
+		if type(spec.Controls) ~= "table" then
+			return nil, "Controls must be a table"
+		end
+		for index, control in ipairs(spec.Controls) do
+			if type(control) ~= "table" or not CONTROL_TYPES[control.Type] then
+				return nil, "Controls[" .. index .. "] has an unknown Type"
+			end
+			table.insert(controls, control)
+		end
+	end
+	local title = clean(tostring(spec.Title or spec.title or id), 24)
+	return {
+		Id = id,
+		Title = title ~= "" and title or id,
+		Subtitle = clean(tostring(spec.Subtitle or spec.subtitle or "module"), 60),
+		Icon = tostring(spec.Icon or "grid"),
+		Priority = tonumber(spec.Priority) or 50,
+		Controls = controls,
+		Run = type(spec.Run) == "function" and spec.Run or nil,
+		Stop = type(spec.Stop) == "function" and spec.Stop or nil,
+		OnMount = type(spec.OnMount) == "function" and spec.OnMount or nil,
+		OnUnmount = type(spec.OnUnmount) == "function" and spec.OnUnmount or nil,
+		AutoRun = spec.AutoRun == true,
+		Running = false,
+		Status = "idle",
+		Page = nil,
+		Refresh = nil,
+		Source = clean(tostring(spec.Source or "script"), 80),
+	}
+end
+
+function Blossom.RegisterModule(spec)
+	if State.destroyed then
+		return nil, "UI destroyed"
+	end
+	local module, err = sanitizeModule(spec)
+	if not module then
+		recordModuleError(type(spec) == "table" and (spec.Id or spec.id) or "?", err)
+		return nil, err
+	end
+	table.insert(Blossom.Modules, module)
+	Blossom.ModuleById[module.Id] = module
+	if State.ready and buildModulePage then
+		local ok, mountErr = safeCall(buildModulePage, module)
+		if not ok then
+			recordModuleError(module.Id, mountErr)
+		end
+	end
+	return module
+end
+
+function Blossom.UnregisterModule(id)
+	local module = Blossom.ModuleById[tostring(id)]
+	if not module then
+		return false
+	end
+	stopModule(module, true)
+	if module.OnUnmount then
+		safeCall(module.OnUnmount, moduleContext(module))
+	end
+	if module.Page then
+		module.Page.Parent.Visible = false
+	end
+	if module.NavRow then
+		module.NavRow.Visible = false
+	end
+	Blossom.ModuleById[module.Id] = nil
+	for index, entry in ipairs(Blossom.Modules) do
+		if entry == module then
+			table.remove(Blossom.Modules, index)
 			break
 		end
 	end
-	if not known then
-		table.insert(SKIN_ORDER, cleanName)
-	end
-	return cleanName
+	return true
 end
 
-local FEATURES = {
-	{
-		Name = "Animation",
-		Controls = {
-			{ Type = "Slider", Label = "Duration scale", Min = 0.25, Max = 2, Step = 0.05, Value = CONFIG.Durations.Scale, OnChange = function(value)
-				CONFIG.Durations.Scale = value
-			end },
-			{ Type = "Slider", Label = "Hover time", Min = 0.04, Max = 0.6, Step = 0.02, Value = CONFIG.Durations.Hover, OnChange = function(value)
-				CONFIG.Durations.Hover = value
-			end },
-			{ Type = "Slider", Label = "Transition time", Min = 0.1, Max = 2, Step = 0.05, Value = CONFIG.Durations.Transition, OnChange = function(value)
-				CONFIG.Durations.Transition = value
-			end },
-			{ Type = "Button", Text = "Replay current loader", Variant = "Primary", OnClick = function(api)
-				api.PlayLoader()
-			end },
-		},
-	},
-	{
-		Name = "Capture",
-		Controls = {
-			{ Type = "Button", Text = "Toggle debug overlay", OnClick = function(api)
-				api.ToggleDebug()
-			end },
-			{ Type = "Button", Text = "Save screenshot", OnClick = function(api)
-				api.Capture()
-			end },
-		},
-	},
-	{
-		Name = "Interface",
-		Controls = {
-			{ Type = "Input", Label = "Status message", Placeholder = "Type and press Enter", OnSubmit = function(text, api)
-				api.Toast(text)
-			end },
-		},
-	},
+function Blossom.GetModules()
+	return Blossom.Modules
+end
+
+runModule = function(module)
+	if module.Running or type(module.Run) ~= "function" then
+		return
+	end
+	module.Running = true
+	module.Status = "running"
+	module.Error = nil
+	module.StartedAt = os.clock()
+	if module.Refresh then
+		safeCall(module.Refresh)
+	end
+	task.spawn(function()
+		local ok, err = safeCall(module.Run, moduleContext(module))
+		module.Running = false
+		if not ok then
+			module.Status = "error"
+			module.Error = tostring(err)
+			recordModuleError(module.Id, err)
+			if toast then
+				toast(module.Title .. " failed", true)
+			end
+		else
+			module.Status = "idle"
+		end
+		if module.Refresh and not State.destroyed then
+			safeCall(module.Refresh)
+		end
+	end)
+end
+
+stopModule = function(module, silent)
+	module.Running = false
+	if type(module.Stop) == "function" then
+		local ok, err = safeCall(module.Stop, moduleContext(module))
+		if not ok then
+			module.Status = "error"
+			module.Error = tostring(err)
+			recordModuleError(module.Id, err)
+			if toast and not silent then
+				toast(module.Title .. " stop failed", true)
+			end
+		end
+	end
+	if module.Status ~= "error" then
+		module.Status = "idle"
+	end
+	if module.Refresh and not State.destroyed then
+		safeCall(module.Refresh)
+	end
+end
+
+local function executorFn(name)
+	local ok, fn = pcall(function()
+		return _G[name]
+	end)
+	if ok and type(fn) == "function" then
+		return fn
+	end
+	return nil
+end
+
+local function registerExternal(entry, source)
+	if type(entry) == "function" then
+		local ok, spec = safeCall(entry)
+		if not ok then
+			recordModuleError(source, spec)
+			return false
+		end
+		entry = spec
+	end
+	if type(entry) ~= "table" then
+		recordModuleError(source, "module did not return a table")
+		return false
+	end
+	entry.Source = source
+	return Blossom.RegisterModule(entry) ~= nil
+end
+
+local function loadFromGlobal()
+	local list = rawget(_G, "BLOSSOM_MODULES")
+	if type(list) ~= "table" then
+		return 0
+	end
+	local loaded = 0
+	for index, entry in ipairs(list) do
+		if registerExternal(entry, "global#" .. index) then
+			loaded = loaded + 1
+		end
+	end
+	return loaded
+end
+
+local function loadFromReplicatedStorage()
+	local folder = ReplicatedStorage:FindFirstChild("BlossomModules") or ReplicatedStorage:FindFirstChild("Blossom")
+	if not folder then
+		return 0
+	end
+	local modulesFolder = folder:FindFirstChild("Modules") or folder
+	local loaded = 0
+	for _, child in ipairs(modulesFolder:GetChildren()) do
+		if child:IsA("ModuleScript") then
+			local ok, result = pcall(require, child)
+			if ok then
+				if registerExternal(result, child:GetFullName()) then
+					loaded = loaded + 1
+				end
+			else
+				recordModuleError(child.Name, result)
+			end
+		end
+	end
+	return loaded
+end
+
+local function loadFromFiles()
+	local listfiles = executorFn("listfiles")
+	local readfile = executorFn("readfile")
+	local loadstringFn = executorFn("loadstring") or loadstring
+	if not listfiles or not readfile or not loadstringFn then
+		return 0
+	end
+	local ok, files = pcall(listfiles, "Blossom/modules")
+	if not ok or type(files) ~= "table" then
+		return 0
+	end
+	local loaded = 0
+	for _, path in ipairs(files) do
+		if type(path) == "string" and path:match("%.luau?$") then
+			local readOk, source = pcall(readfile, path)
+			if readOk and type(source) == "string" then
+				local chunk, compileErr = loadstringFn(source, "=" .. path)
+				if chunk then
+					local runOk, result = pcall(chunk)
+					if not runOk then
+						recordModuleError(path, result)
+					elseif type(result) == "table" then
+						if registerExternal(result, path) then
+							loaded = loaded + 1
+						end
+					end
+				else
+					recordModuleError(path, compileErr)
+				end
+			end
+		end
+	end
+	return loaded
+end
+
+function Blossom.LoadModules()
+	local before = #Blossom.Modules
+	loadFromGlobal()
+	loadFromReplicatedStorage()
+	loadFromFiles()
+	return #Blossom.Modules - before
+end
+
+function Blossom.SetSkin(name)
+	local skin = SKINS[name]
+	if not skin then
+		return false
+	end
+	applyTheme(skin, true)
+	saveProfile()
+	if State.skinChips then
+		for skinName, chip in pairs(State.skinChips) do
+			chip:SetActive(skinName == name)
+		end
+	end
+	return true
+end
+local CATEGORY_ICONS = {
+	Home = "home",
+	Loader = "ring",
+	Modules = "grid",
+	Settings = "cog",
+	Controls = "sliders",
 }
 
-local SCHEMA = {
+local ShellConnections = {}
+local setPage
+local addPage
+local mountModule
+local buildMain
+
+local function connectShell(signal, fn)
+	local conn = signal:Connect(fn)
+	table.insert(ShellConnections, conn)
+	return conn
+end
+
+local function clearShell()
+	for i = #ShellConnections, 1, -1 do
+		pcall(function()
+			ShellConnections[i]:Disconnect()
+		end)
+		table.remove(ShellConnections, i)
+	end
+	if State.main then
+		pcall(function()
+			State.main:Destroy()
+		end)
+	end
+	State.main = nil
+	State.mainColumn = nil
+	State.sidebar = nil
+	State.content = nil
+	State.navList = nil
+	State.bannerTitle = nil
+	State.bannerSub = nil
+	State.pagesHost = nil
+	State.pages = {}
+	State.pageMeta = {}
+	State.navRows = {}
+	State.pageIndexById = {}
+	State.activePage = 0
+	State.skinChips = {}
+	ThemeCache.list = nil
+end
+
+local drag = { active = false, start = nil, center = nil }
+
+local function clampCenter(center)
+	local vp = viewport()
+	local halfW = State.mainColumn.AbsoluteSize.X * 0.5
+	local halfH = State.mainColumn.AbsoluteSize.Y * 0.5
+	local minX = halfW + 8
+	local minY = halfH + 8
+	return Vector2.new(
+		clamp(center.X, minX, math.max(minX, vp.X - halfW - 8)),
+		clamp(center.Y, minY, math.max(minY, vp.Y - halfH - 8))
+	)
+end
+
+local function applyCenter(center)
+	local scale = (State.rootScale and State.rootScale.Scale) or 1
+	State.mainColumn.Position = UDim2.fromOffset(center.X / scale, center.Y / scale)
+end
+
+local function titlebarBlockedAt(point, titlebar)
+	local ok, list = pcall(function()
+		return UserInputService:GetGuiObjectsAtPosition(point.X, point.Y)
+	end)
+	if not ok or type(list) ~= "table" then
+		return false
+	end
+	for _, object in ipairs(list) do
+		if object:IsA("TextButton") or object:IsA("ImageButton") then
+			local node = object
+			while node and node ~= titlebar do
+				node = node.Parent
+			end
+			if node == titlebar then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function setBackdrop(level)
+	if not State.backdrop then
+		return
+	end
+	State.backdrop:SetAttribute("BackdropLevel", level)
+	State.backdrop.Visible = true
+	local color, transparency = Tokens.dim, State.theme.DimTransparency
+	if level == "loading" then
+		color = hex(CONFIG.Loading.BackdropColor)
+		transparency = CONFIG.Loading.BackdropTransparency
+	elseif level == "main" then
+		transparency = 1
+	end
+	uiTween(State.backdrop, {
+		BackgroundTransparency = transparency,
+		BackgroundColor3 = color,
+	}, CONFIG.Durations.Fade, CONFIG.Easing.Fade, CONFIG.Easing.FadeDir)
+end
+
+local function sortedModules()
+	local list = {}
+	for index, module in ipairs(Blossom.Modules) do
+		list[index] = module
+	end
+	table.sort(list, function(a, b)
+		if a.Priority ~= b.Priority then
+			return a.Priority < b.Priority
+		end
+		return a.Title < b.Title
+	end)
+	return list
+end
+
+local function placeRight(instance, width, inset)
+	instance.AnchorPoint = Vector2.new(1, 0.5)
+	instance.Position = UDim2.new(1, -(inset or 10), 0.5, 0)
+	instance.Size = UDim2.new(0, width, 0, instance.Size.Y.Offset)
+end
+
+local function smallButton(parent, text, width, order, variant)
+	local button = makeButton(parent, {
+		Text = text,
+		Variant = variant,
+		Order = order,
+		Size = UDim2.new(0, width, 0, math.max(28, Metrics.button - 4)),
+		TextSize = Metrics.captionSize + 1,
+	})
+	return button
+end
+
+addPage = function(title, subtitle, icon, id)
+	local index = #State.pages + 1
+	local page = new("Frame", {
+		Name = "Page",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(0, 0),
+		Visible = index == 1,
+		ZIndex = index == 1 and 3 or 1,
+	}, State.pagesHost)
+	local scroll = new("ScrollingFrame", {
+		Name = "Scroll",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollBarThickness = Device.touch and 3 or 2,
+		ScrollBarImageColor3 = Tokens.accent,
+		ScrollBarImageTransparency = 0.6,
+		ScrollingEnabled = true,
+		ElasticBehavior = Enum.ElasticBehavior.WhenScrollable,
+	}, page)
+	new("UIPadding", {
+		PaddingTop = UDim.new(0, Metrics.compact and 10 or 12),
+		PaddingBottom = UDim.new(0, 16),
+		PaddingLeft = UDim.new(0, Metrics.compact and 8 or 12),
+		PaddingRight = UDim.new(0, Metrics.compact and 8 or 12),
+	}, scroll)
+	new("UIListLayout", {
+		Padding = UDim.new(0, 10),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		FillDirection = Enum.FillDirection.Vertical,
+	}, scroll)
+
+	local navWidth = clamp(74 + #title * 6, 98, 160)
+	local row = new("TextButton", {
+		Name = "NavRow",
+		Size = Metrics.compact and UDim2.new(0, navWidth, 0, Metrics.nav - 10) or UDim2.new(1, 0, 0, Metrics.nav),
+		BackgroundColor3 = Tokens.button,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = "",
+		Selectable = true,
+		LayoutOrder = index,
+		ZIndex = 6,
+		Role = "Ghost",
+	}, State.navList)
+	new("UICorner", { CornerRadius = UDim.new(0, 8), Role = "Small" }, row)
+	local iconBox = makeIcon(row, CATEGORY_ICONS[title] or icon or "grid")
+	if Metrics.compact then
+		iconBox.Position = UDim2.new(0, 10, 0.5, 0)
+		iconBox.Size = UDim2.new(0, 14, 0, 14)
+	end
+	local label = makeLabel(row, {
+		Text = clean(title, 24),
+		Tier = "Secondary",
+		TextRole = "Body",
+		Position = Metrics.compact and UDim2.new(0, 30, 0, 0) or UDim2.new(0, 36, 0, 0),
+		Size = Metrics.compact and UDim2.new(1, -36, 1, 0) or UDim2.new(1, -44, 1, 0),
+		Truncate = true,
+		ZIndex = 7,
+	})
+	connect(row.MouseButton1Click, function()
+		setPage(index)
+	end)
+	if Device.hover then
+		connect(row.MouseEnter, function()
+			if index ~= State.activePage then
+				uiTween(row, { BackgroundTransparency = 0.94 }, CONFIG.Durations.Hover, "Quad", "Out")
+			end
+		end)
+		connect(row.MouseLeave, function()
+			if index ~= State.activePage then
+				uiTween(row, { BackgroundTransparency = 1 }, CONFIG.Durations.Hover, "Quad", "Out")
+			end
+		end)
+	end
+
+	State.pages[index] = page
+	State.pageMeta[index] = { title = title, subtitle = subtitle or "", icon = icon or "grid" }
+	State.navRows[index] = { row = row, icon = iconBox, label = label }
+	if id then
+		State.pageIndexById[id] = index
+	end
+	return scroll, row
+end
+
+setPage = function(index, instant)
+	local target = State.pages[index]
+	if not target then
+		return
+	end
+	if index == State.activePage then
+		return
+	end
+	local previous = State.pages[State.activePage]
+	State.activePage = index
+	if previous then
+		previous.Visible = false
+	end
+	target.Visible = true
+	target.ZIndex = 3
+	if not instant and not Device.mobile then
+		target.Position = UDim2.fromOffset(0, 10)
+		playTween(target, ti(duration(CONFIG.Durations.Slide), CONFIG.Easing.Slide, CONFIG.Easing.SlideDir), { Position = UDim2.fromOffset(0, 0) })
+	else
+		target.Position = UDim2.fromOffset(0, 0)
+	end
+	for i, item in ipairs(State.navRows) do
+		local active = i == index
+		item.row:SetAttribute("Role", active and "Accent" or "Ghost")
+		item.row.BackgroundColor3 = active and Tokens.accent or Tokens.button
+		item.row.BackgroundTransparency = active and 0.84 or 1
+		item.label:SetAttribute("Tier", active and "Accent" or "Secondary")
+		item.label.TextColor3 = active and Tokens.accent or Tokens.textSecondary
+		tintIcon(item.icon, active and Tokens.accent or Tokens.textDisabled, false)
+	end
+	local meta = State.pageMeta[index]
+	if State.bannerTitle and meta then
+		State.bannerTitle.Text = meta.title
+		State.bannerSub.Text = meta.subtitle or ""
+		if not instant and not Device.mobile then
+			State.bannerTitle.TextTransparency = 1
+			uiTween(State.bannerTitle, { TextTransparency = 0 }, 0.2, "Quad", "Out")
+			State.bannerSub.TextTransparency = 1
+			uiTween(State.bannerSub, { TextTransparency = 0 }, 0.26, "Quad", "Out")
+		else
+			State.bannerTitle.TextTransparency = 0
+			State.bannerSub.TextTransparency = 0
+		end
+	end
+end
+
+local function buildTitlebar(parent)
+	local bar = new("Frame", {
+		Name = "Titlebar",
+		Size = UDim2.new(1, 0, 0, Metrics.topbar),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 6,
+	}, parent)
+	new("Frame", {
+		Name = "Sep",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 0, 1, 0),
+		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundColor3 = Tokens.divider,
+		BackgroundTransparency = 0.55,
+		BorderSizePixel = 0,
+		Role = "Divider",
+		ZIndex = 6,
+	}, bar)
+	local mark = new("Frame", {
+		Name = "Mark",
+		Position = UDim2.new(0, 16, 0.5, -3),
+		Size = UDim2.new(0, 6, 0, 6),
+		BackgroundColor3 = Tokens.accent,
+		BorderSizePixel = 0,
+		Role = "Accent",
+		ZIndex = 7,
+	}, bar)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, mark)
+	makeLabel(bar, {
+		Name = "Wordmark",
+		Text = clean(CONFIG.Brand.Name, 24),
+		Tier = "Primary",
+		TextRole = "Caption",
+		Bold = true,
+		FixedSize = true,
+		TextSize = 13,
+		Position = UDim2.new(0, 28, 0, 0),
+		Size = UDim2.new(0, 140, 1, 0),
+		ZIndex = 7,
+	})
+	local closeSize = Device.touch and 40 or 26
+	local close = makeButton(bar, {
+		Text = "X",
+		Variant = "Ghost",
+		Size = UDim2.new(0, closeSize, 0, closeSize),
+		TextSize = 12,
+		Bold = true,
+		Radius = 6,
+		ZIndex = 7,
+	})
+	close.Instance.AnchorPoint = Vector2.new(1, 0.5)
+	close.Instance.Position = UDim2.new(1, -6, 0.5, 0)
+	close:Bind(function()
+		hideMain(false)
+	end)
+	if Metrics.compact then
+		local gear = makeButton(bar, {
+			Text = "",
+			Variant = "Ghost",
+			Size = UDim2.new(0, closeSize, 0, closeSize),
+			Radius = 6,
+			ZIndex = 7,
+		})
+		gear.Instance.AnchorPoint = Vector2.new(1, 0.5)
+		gear.Instance.Position = UDim2.new(1, -(closeSize + 10), 0.5, 0)
+		local icon = makeIcon(gear.Instance, "cog")
+		icon.AnchorPoint = Vector2.new(0.5, 0.5)
+		icon.Position = UDim2.fromScale(0.5, 0.5)
+		gear:Bind(function()
+			openCustomize("Theme")
+		end)
+	else
+		makeLabel(bar, {
+			Name = "Version",
+			Text = "v" .. Blossom.Version,
+			Tier = "Disabled",
+			TextRole = "Caption",
+			FixedSize = true,
+			TextSize = 11,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -44, 0.5, 0),
+			Size = UDim2.new(0, 40, 1, 0),
+			XAlign = Enum.TextXAlignment.Right,
+			ZIndex = 7,
+		})
+	end
+	return bar
+end
+
+local function buildSidebar(parent)
+	local sidebar = new("Frame", {
+		Name = "Sidebar",
+		Position = UDim2.new(0, 8, 0, Metrics.topbar + 8),
+		Size = UDim2.new(0, Metrics.sidebar, 1, -(Metrics.topbar + 16)),
+		BackgroundColor3 = Tokens.sidebar,
+		BorderSizePixel = 0,
+		Role = "Sidebar",
+		ZIndex = 4,
+	}, parent)
+	State.sidebar = sidebar
+	new("UICorner", { CornerRadius = UDim.new(0, Metrics.corner), Role = "Corner" }, sidebar)
+	new("UIStroke", {
+		Color = Tokens.textPrimary,
+		Transparency = math.min(1, State.theme.StrokeTransparency + 0.04),
+		Thickness = 1,
+		Role = "CardEdge",
+	}, sidebar)
+	local avatar = new("Frame", {
+		Name = "Avatar",
+		Position = UDim2.new(0, 14, 0, 13),
+		Size = UDim2.new(0, 34, 0, 34),
+		BackgroundColor3 = Tokens.accent,
+		BorderSizePixel = 0,
+		Role = "Accent",
+		ZIndex = 6,
+	}, sidebar)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, avatar)
+	new("UIStroke", { Color = Tokens.textPrimary, Transparency = 0.84, Thickness = 1, Role = "Soft" }, avatar)
+	makeLabel(avatar, {
+		Name = "Letter",
+		Text = string.sub(clean(CONFIG.Brand.Name, 24), 1, 1),
+		Tier = "OnAccent",
+		TextRole = "Caption",
+		Bold = true,
+		FixedSize = true,
+		TextSize = 16,
+		Size = UDim2.fromScale(1, 1),
+		XAlign = Enum.TextXAlignment.Center,
+		ZIndex = 7,
+	})
+	local portraitId = tostring(CONFIG.Brand.AvatarImageId or ""):gsub("%D", "")
+	if portraitId ~= "" then
+		new("ImageLabel", {
+			Name = "Portrait",
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			Image = "rbxassetid://" .. portraitId,
+			ScaleType = Enum.ScaleType.Crop,
+			ZIndex = 8,
+		}, avatar)
+	elseif State.player then
+		task.spawn(function()
+			local ok, url = pcall(function()
+				return Players:GetUserThumbnailAsync(State.player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+			end)
+			if ok and type(url) == "string" and url ~= "" and not State.destroyed and avatar.Parent then
+				local image = new("ImageLabel", {
+					Name = "Portrait",
+					Size = UDim2.fromScale(1, 1),
+					BackgroundTransparency = 1,
+					Image = url,
+					ScaleType = Enum.ScaleType.Crop,
+					ZIndex = 8,
+				}, avatar)
+				new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, image)
+			end
+		end)
+	end
+	makeLabel(sidebar, {
+		Name = "Brand",
+		Text = clean(CONFIG.Brand.Name, 24),
+		Tier = "Primary",
+		TextRole = "Body",
+		Bold = true,
+		FixedSize = true,
+		TextSize = 15,
+		Position = UDim2.new(0, 56, 0, 12),
+		Size = UDim2.new(1, -64, 0, 20),
+		Truncate = true,
+		ZIndex = 6,
+	})
+	makeLabel(sidebar, {
+		Name = "Tag",
+		Text = clean(CONFIG.Brand.Tag, 24),
+		Tier = "Secondary",
+		TextRole = "Caption",
+		FixedSize = true,
+		TextSize = 11,
+		Position = UDim2.new(0, 56, 0, 30),
+		Size = UDim2.new(1, -64, 0, 16),
+		ZIndex = 6,
+	})
+	State.navList = new("ScrollingFrame", {
+		Name = "Nav",
+		Position = UDim2.new(0, 8, 0, 66),
+		Size = UDim2.new(1, -16, 1, -130),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollBarThickness = 0,
+		ZIndex = 5,
+	}, sidebar)
+	new("UIListLayout", {
+		Padding = UDim.new(0, 2),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		FillDirection = Enum.FillDirection.Vertical,
+	}, State.navList)
+	local footer = new("Frame", {
+		Name = "Footer",
+		Position = UDim2.new(0, 0, 1, -58),
+		Size = UDim2.new(1, 0, 0, 58),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 6,
+	}, sidebar)
+	new("Frame", {
+		Name = "Sep",
+		Position = UDim2.new(0, 10, 0, 0),
+		Size = UDim2.new(1, -20, 0, 1),
+		BackgroundColor3 = Tokens.divider,
+		BackgroundTransparency = 0.4,
+		BorderSizePixel = 0,
+		Role = "Divider",
+		ZIndex = 6,
+	}, footer)
+	local customize = smallButton(footer, "Customize", 92, 1, "Ghost")
+	customize.Instance.AnchorPoint = Vector2.new(0, 0)
+	customize.Instance.Position = UDim2.new(0, 10, 0, 8)
+	customize:Bind(function()
+		openCustomize("Theme")
+	end)
+	makeLabel(footer, {
+		Name = "Hint",
+		Text = "drag to move",
+		Tier = "Disabled",
+		TextRole = "Caption",
+		FixedSize = true,
+		TextSize = 10,
+		Position = UDim2.new(0, 10, 0, 38),
+		Size = UDim2.new(1, -20, 0, 14),
+		Truncate = true,
+		ZIndex = 6,
+	})
+end
+
+local function buildCompactNav(parent)
+	State.navList = new("ScrollingFrame", {
+		Name = "Nav",
+		Position = UDim2.new(0, 0, 0, Metrics.topbar),
+		Size = UDim2.new(1, 0, 0, Metrics.nav),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		AutomaticCanvasSize = Enum.AutomaticSize.X,
+		ScrollingDirection = Enum.ScrollingDirection.X,
+		ScrollBarThickness = 0,
+		ZIndex = 5,
+	}, parent)
+	new("UIPadding", {
+		PaddingLeft = UDim.new(0, 8),
+		PaddingRight = UDim.new(0, 8),
+		PaddingTop = UDim.new(0, 5),
+		PaddingBottom = UDim.new(0, 5),
+	}, State.navList)
+	new("UIListLayout", {
+		Padding = UDim.new(0, 6),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		FillDirection = Enum.FillDirection.Horizontal,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+	}, State.navList)
+end
+
+local function buildContent(parent)
+	local content = new("Frame", {
+		Name = "Content",
+		Position = Metrics.compact and UDim2.new(0, 0, 0, Metrics.topbar + Metrics.nav) or UDim2.new(0, Metrics.sidebar, 0, Metrics.topbar),
+		Size = Metrics.compact and UDim2.new(1, 0, 1, -(Metrics.topbar + Metrics.nav)) or UDim2.new(1, -Metrics.sidebar, 1, -Metrics.topbar),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 4,
+	}, parent)
+	State.content = content
+	local banner = new("Frame", {
+		Name = "Banner",
+		Size = UDim2.new(1, 0, 0, Metrics.banner),
+		BackgroundColor3 = Tokens.base,
+		BorderSizePixel = 0,
+		ClipsDescendants = true,
+		ZIndex = 1,
+	}, content)
+	new("UIGradient", { Role = "Header" }, banner)
+	local mark = new("Frame", {
+		Name = "Mark",
+		Position = UDim2.new(0, 16, 0, 22),
+		Size = UDim2.new(0, 3, 0, 16),
+		BackgroundColor3 = Tokens.accent,
+		BorderSizePixel = 0,
+		Role = "Accent",
+		ZIndex = 4,
+	}, banner)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, mark)
+	State.bannerTitle = makeLabel(banner, {
+		Name = "Title",
+		Text = "Home",
+		Tier = "Primary",
+		TextRole = "Title",
+		Bold = true,
+		FixedSize = true,
+		TextSize = Metrics.titleSize,
+		Position = UDim2.new(0, 27, 0, Metrics.compact and 14 or 18),
+		Size = UDim2.new(1, -43, 0, 26),
+		Truncate = true,
+		ZIndex = 4,
+	})
+	State.bannerSub = makeLabel(banner, {
+		Name = "Sub",
+		Text = "",
+		Tier = "Secondary",
+		TextRole = "Caption",
+		FixedSize = true,
+		TextSize = Metrics.captionSize,
+		Position = UDim2.new(0, 27, 0, Metrics.compact and 38 or 42),
+		Size = UDim2.new(1, -43, 0, 16),
+		Truncate = true,
+		ZIndex = 4,
+	})
+	new("Frame", {
+		Name = "Rule",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 0, 1, 0),
+		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundColor3 = Tokens.divider,
+		BorderSizePixel = 0,
+		Role = "Divider",
+		ZIndex = 4,
+	}, banner)
+	State.pagesHost = new("Frame", {
+		Name = "Pages",
+		Position = UDim2.new(0, 0, 0, Metrics.banner),
+		Size = UDim2.new(1, 0, 1, -Metrics.banner),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ClipsDescendants = true,
+		ZIndex = 2,
+	}, content)
+end
+
+showMain = function(animated)
+	if not State.main then
+		return
+	end
+	State.mainVisible = true
+	State.main.Visible = not State.userHidden
+	State.loading = false
+	manageBlur()
+	setBackdrop("main")
+	if animated and not Device.mobile then
+		State.mainColumn.Position = UDim2.new(0.5, 0, 0.5, 12)
+		uiTween(State.mainColumn, { Position = UDim2.fromScale(0.5, 0.5) }, CONFIG.Durations.Slide, "Quint", "Out")
+	else
+		State.mainColumn.Position = UDim2.fromScale(0.5, 0.5)
+	end
+	applyVisibility()
+end
+
+hideMain = function(instant)
+	if not State.main then
+		return
+	end
+	State.mainVisible = false
+	State.main.Visible = false
+	State.mainColumn.Position = UDim2.fromScale(0.5, 0.5)
+	applyVisibility()
+end
+
+local function updateLayout()
+	Metrics = computeMetrics()
+	if not State.mainColumn or not State.rootScale then
+		return
+	end
+	if State.compact ~= nil and State.compact ~= Metrics.compact then
+		local page = State.activePage
+		buildMain()
+		if page and page > 0 then
+			setPage(math.min(page, #State.pages), true)
+		end
+		applyVisibility()
+		return
+	end
+	State.rootScale.Scale = Metrics.scale
+	State.mainColumn.Size = UDim2.fromOffset(Metrics.width, Metrics.height)
+	if Metrics.compact then
+		State.navList.Size = UDim2.new(1, 0, 0, Metrics.nav)
+		State.navList.Position = UDim2.new(0, 0, 0, Metrics.topbar)
+		State.content.Position = UDim2.new(0, 0, 0, Metrics.topbar + Metrics.nav)
+		State.content.Size = UDim2.new(1, 0, 1, -(Metrics.topbar + Metrics.nav))
+	else
+		State.sidebar.Size = UDim2.new(0, Metrics.sidebar, 1, -(Metrics.topbar + 16))
+		State.content.Position = UDim2.new(0, Metrics.sidebar, 0, Metrics.topbar)
+		State.content.Size = UDim2.new(1, -Metrics.sidebar, 1, -Metrics.topbar)
+	end
+end
+
+local function buildHome(scroll)
+	local actions = makeCard(scroll, { Title = "Quick actions", Order = 1 })
+	makeRow(actions, {
+		Label = "Customize",
+		Order = 1,
+		ControlWidth = 92,
+		Build = function(row)
+			local button = smallButton(row, "Open", 76, 1)
+			placeRight(button.Instance, 76)
+			button:Bind(function()
+				openCustomize("Theme")
+			end)
+		end,
+	})
+	makeRow(actions, {
+		Label = "Loading animation",
+		Order = 2,
+		ControlWidth = 92,
+		Build = function(row)
+			local button = smallButton(row, "Play", 76, 1, "Primary")
+			placeRight(button.Instance, 76)
+			button:Bind(function()
+				playGallery()
+			end)
+		end,
+	})
+	makeRow(actions, {
+		Label = "Auto execute modules",
+		Order = 3,
+		ControlWidth = 92,
+		Build = function(row)
+			local button = smallButton(row, State.autoExecute and "On" or "Off", 60, 1, "Ghost")
+			placeRight(button.Instance, 60)
+			button:SetActive(State.autoExecute)
+			button:Bind(function()
+				State.autoExecute = not State.autoExecute
+				button:SetText(State.autoExecute and "On" or "Off")
+				button:SetActive(State.autoExecute)
+				saveProfile()
+				toast(State.autoExecute and "Auto execute on" or "Auto execute off")
+			end)
+		end,
+	})
+
+	local registry = makeCard(scroll, { Title = "Modules", Order = 2 })
+	makeListRow(registry, {
+		Title = "Loaded",
+		Subtitle = tostring(#Blossom.Modules) .. " modules · " .. tostring(#Blossom.ModuleErrors) .. " errors",
+		Order = 1,
+	})
+	makeRow(registry, {
+		Label = "Manage modules",
+		Order = 2,
+		ControlWidth = 92,
+		Build = function(row)
+			local button = smallButton(row, "Open", 76, 1, "Ghost")
+			placeRight(button.Instance, 76)
+			button:Bind(function()
+				local index = State.pageIndexById.modules
+				if index then
+					setPage(index)
+				end
+			end)
+		end,
+	})
+end
+
+local function buildLoader(scroll)
+	local play = makeCard(scroll, { Title = "Loading animation", Order = 1 })
+	makeRow(play, {
+		Label = "Blossom splash",
+		Order = 1,
+		ControlWidth = 96,
+		Build = function(row)
+			local button = smallButton(row, "Play", 76, 1, "Primary")
+			placeRight(button.Instance, 76)
+			button:Run(function()
+				playGallery()
+			end)
+		end,
+	})
+
+	local playback = makeCard(scroll, { Title = "Playback", Order = 2 })
+	makeToggle(playback, {
+		Text = "Loop animations",
+		Value = CONFIG.Gallery.LoopEnabled,
+		Order = 1,
+		OnChange = function(value)
+			CONFIG.Gallery.LoopEnabled = value
+		end,
+	})
+	makeToggle(playback, {
+		Text = "3-2-1 countdown",
+		Value = CONFIG.Gallery.CountdownEnabled,
+		Order = 2,
+		OnChange = function(value)
+			CONFIG.Gallery.CountdownEnabled = value
+		end,
+	})
+	makeRow(playback, {
+		Label = "Speed",
+		Order = 3,
+		ControlWidth = 178,
+		Build = function(row)
+			local chips = {}
+			local count = #CONFIG.Gallery.Speeds
+			for index, speed in ipairs(CONFIG.Gallery.Speeds) do
+				local chip = makeButton(row, {
+					Text = tostring(speed) .. "x",
+					Size = UDim2.new(0, 50, 0, math.max(28, Metrics.button - 4)),
+					TextSize = Metrics.captionSize,
+					Order = index,
+				})
+				chip.Instance.AnchorPoint = Vector2.new(1, 0.5)
+				chip.Instance.Position = UDim2.new(1, -10 - (count - index) * 56, 0.5, 0)
+				chip:SetActive(State.speed == speed)
+				chip:Bind(function()
+					State.speed = speed
+					for _, entry in ipairs(chips) do
+						entry.chip:SetActive(entry.speed == speed)
+					end
+					toast("Speed " .. tostring(speed) .. "x")
+				end)
+				table.insert(chips, { speed = speed, chip = chip })
+			end
+		end,
+	})
+end
+
+local function buildModules(scroll)
+	local head = makeCard(scroll, { Title = "Registry", Order = 1 })
+	makeRow(head, {
+		Label = "Reload module sources",
+		Order = 1,
+		ControlWidth = 112,
+		Build = function(row)
+			local button = smallButton(row, "Reload", 84, 1, "Ghost")
+			placeRight(button.Instance, 84)
+			button:Run(function()
+				local loaded = Blossom.LoadModules()
+				toast(loaded .. " new module(s) loaded")
+			end)
+		end,
+	})
+	makeListRow(head, {
+		Title = "Installed",
+		Subtitle = tostring(#Blossom.Modules) .. " module(s) · " .. tostring(#Blossom.ModuleErrors) .. " error(s)",
+		Order = 2,
+	})
+	local list = sortedModules()
+	for index, module in ipairs(list) do
+		local row = makeRow(head, {
+			Label = module.Title,
+			Order = 10 + index,
+			ControlWidth = 96,
+			Build = function(parent)
+				local button = smallButton(parent, module.Run and "Run" or "Open", 72, 1, "Ghost")
+				placeRight(button.Instance, 72)
+				button:Bind(function()
+					if module.Run then
+						if module.Running then
+							stopModule(module)
+						else
+							runModule(module)
+						end
+					else
+						local pageIndex = State.pageIndexById["module:" .. module.Id]
+						if pageIndex then
+							setPage(pageIndex)
+						end
+					end
+				end)
+				table.insert(REBUILD, function()
+					button:SetText(module.Running and "Stop" or (module.Run and "Run" or "Open"))
+				end)
+			end,
+		})
+		row:SetAttribute("Tier", "Primary")
+	end
+	if #Blossom.ModuleErrors > 0 then
+		local errors = makeCard(scroll, { Title = "Errors", Order = 2 })
+		for index, entry in ipairs(Blossom.ModuleErrors) do
+			makeListRow(errors, {
+				Title = entry.Id,
+				Subtitle = clean(entry.Message, 110),
+				Order = index,
+			})
+		end
+	end
+end
+
+local function buildSettings(scroll)
+	local themes = makeCard(scroll, { Title = "Theme", Order = 1 })
+	local chips = new("Frame", {
+		Name = "Chips",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 1,
+	}, themes)
+	new("UIPadding", {
+		PaddingTop = UDim.new(0, 6),
+		PaddingBottom = UDim.new(0, 10),
+		PaddingLeft = UDim.new(0, 8),
+		PaddingRight = UDim.new(0, 8),
+	}, chips)
+	new("UIListLayout", {
+		Padding = UDim.new(0, 6),
+		FillDirection = Enum.FillDirection.Horizontal,
+		Wraps = true,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, chips)
+	State.rebuildSkinChips = function()
+		for _, child in ipairs(chips:GetChildren()) do
+			if child:IsA("TextButton") then
+				child:Destroy()
+			end
+		end
+		State.skinChips = {}
+		for index, name in ipairs(skinNames()) do
+			local chip = makeButton(chips, {
+				Text = name,
+				Variant = "Ghost",
+				Size = UDim2.new(0, clamp(66 + #name * 6, 96, 148), 0, math.max(30, Metrics.button - 4)),
+				TextSize = Metrics.captionSize,
+				Order = index,
+			})
+			chip:SetActive(State.theme.Name == name)
+			State.skinChips[name] = chip
+			chip:Bind(function()
+				Blossom.SetSkin(name)
+				toast("Theme: " .. name)
+			end)
+		end
+		ThemeCache.list = nil
+	end
+	State.rebuildSkinChips()
+
+	local json = makeCard(scroll, { Title = "Advanced", Order = 2 })
+	makeRow(json, {
+		Label = "Theme JSON",
+		Order = 1,
+		ControlWidth = 92,
+		Build = function(row)
+			local button = smallButton(row, "Edit", 72, 1, "Ghost")
+			placeRight(button.Instance, 72)
+			button:Bind(function()
+				openCustomize("Theme")
+			end)
+		end,
+	})
+	makeRow(json, {
+		Label = "Config JSON",
+		Order = 2,
+		ControlWidth = 92,
+		Build = function(row)
+			local button = smallButton(row, "Edit", 72, 1, "Ghost")
+			placeRight(button.Instance, 72)
+			button:Bind(function()
+				openCustomize("Config")
+			end)
+		end,
+	})
+	makeRow(json, {
+		Label = "Re-apply theme",
+		Order = 3,
+		ControlWidth = 92,
+		Build = function(row)
+			local button = smallButton(row, "Apply", 72, 1, "Ghost")
+			placeRight(button.Instance, 72)
+			button:Bind(function()
+				applyTheme(State.theme, false)
+				updateLayout()
+				toast("Theme re-applied")
+			end)
+		end,
+	})
+
+	local info = makeCard(scroll, { Title = "Info", Order = 3 })
+	makeListRow(info, { Title = "Version", Subtitle = "Blossom " .. Blossom.Version, Order = 1 })
+	makeListRow(info, { Title = "Layout", Subtitle = Metrics.compact and "compact (touch)" or "desktop", Order = 2 })
+	makeListRow(info, { Title = "Tap target", Subtitle = tostring(Metrics.button) .. "px minimum", Order = 3 })
+end
+
+local function buildControls(scroll, module)
+	if not module.Controls or #module.Controls == 0 then
+		return nil
+	end
+	local api = moduleContext(module)
+	local group = makeCard(scroll, { Title = "Settings", Order = 2 })
+	for order, item in ipairs(module.Controls) do
+		if item.Type == "Button" then
+			local button = makeButton(group, {
+				Text = clean(tostring(item.Text or "Run"), 40),
+				Variant = item.Variant == "Primary" and "Primary" or nil,
+				Size = UDim2.new(1, 0, 0, Metrics.button),
+				Order = order * 10,
+				Divider = true,
+			})
+			button:Bind(function()
+				if type(item.OnClick) == "function" then
+					item.OnClick(api)
+				end
+			end)
+		elseif item.Type == "Toggle" then
+			makeToggle(group, {
+				Text = clean(tostring(item.Label or item.Text or "Toggle"), 40),
+				Value = item.Value == true,
+				Order = order * 10,
+				OnChange = function(value)
+					if type(item.OnChange) == "function" then
+						item.OnChange(value, api)
+					end
+				end,
+			})
+		elseif item.Type == "Slider" then
+			makeSlider(group, {
+				Label = clean(tostring(item.Label or "Slider"), 40),
+				Min = item.Min,
+				Max = item.Max,
+				Step = item.Step,
+				Value = item.Value,
+				Format = item.Format,
+				Order = order * 10,
+				OnChange = function(value)
+					if type(item.OnChange) == "function" then
+						item.OnChange(value, api)
+					end
+				end,
+			})
+		elseif item.Type == "Input" then
+			makeRow(group, {
+				Label = clean(tostring(item.Label or "Input"), 40),
+				Order = order * 10,
+				ControlWidth = 180,
+				Build = function(row)
+					local input = makeInput(row, {
+						Text = item.Value ~= nil and clean(tostring(item.Value), 400) or "",
+						Placeholder = item.Placeholder,
+						Size = UDim2.new(0, 180, 0, Metrics.input),
+						OnSubmit = function(text)
+							if type(item.OnSubmit) == "function" then
+								item.OnSubmit(text, api)
+							end
+						end,
+					})
+					input.Instance.AnchorPoint = Vector2.new(1, 0.5)
+					input.Instance.Position = UDim2.new(1, -10, 0.5, 0)
+				end,
+			})
+		end
+	end
+	return group
+end
+
+mountModule = function(module)
+	if module.Page then
+		return
+	end
+	local scroll, navRow = addPage(module.Title, module.Subtitle, module.Icon, "module:" .. module.Id)
+	module.Page = scroll
+	module.NavRow = navRow
+	local status = makeCard(scroll, { Title = "Status", Order = 1 })
+	local statusLabel = makeLabel(status, {
+		Name = "State",
+		Text = "idle",
+		Tier = "Secondary",
+		TextRole = "Caption",
+		LayoutOrder = 1,
+		Size = UDim2.new(1, -16, 0, 24),
+		Position = UDim2.new(0, 8, 0, 0),
+		Truncate = true,
+	})
+	local runButton, stopButton
+	if module.Run then
+		local buttons = new("Frame", {
+			Name = "Actions",
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, 0, 0, Metrics.button),
+			LayoutOrder = 2,
+		}, status)
+		runButton = makeButton(buttons, {
+			Text = "Run",
+			Variant = "Primary",
+			Size = UDim2.new(0, 96, 1, 0),
+		})
+		runButton.Instance.AnchorPoint = Vector2.new(0, 0)
+		runButton.Instance.Position = UDim2.new(0, 6, 0, 0)
+		runButton:Bind(function()
+			runModule(module)
+		end)
+		stopButton = makeButton(buttons, {
+			Text = "Stop",
+			Variant = "Ghost",
+			Size = UDim2.new(0, 96, 1, 0),
+		})
+		stopButton.Instance.AnchorPoint = Vector2.new(1, 0)
+		stopButton.Instance.Position = UDim2.new(1, -6, 0, 0)
+		stopButton:Bind(function()
+			stopModule(module)
+		end)
+	end
+	local function refresh()
+		local running = module.Running == true
+		if runButton then
+			runButton:SetText(running and "Running" or "Run")
+			runButton:SetEnabled(not running)
+		end
+		if stopButton then
+			stopButton:SetEnabled(running)
+		end
+		local text = module.Status or "idle"
+		if module.Error then
+			text = "error · " .. clean(module.Error, 90)
+		end
+		statusLabel.Text = text
+		statusLabel.TextColor3 = module.Status == "error" and Color3.fromRGB(255, 132, 132) or Tokens.textSecondary
+	end
+	module.Refresh = refresh
+	refresh()
+	buildControls(scroll, module)
+	if module.OnMount then
+		local ok, err = safeCall(module.OnMount, moduleContext(module))
+		if not ok then
+			recordModuleError(module.Id, err)
+		end
+	end
+	if module.AutoRun and module.Run then
+		runModule(module)
+	end
+end
+
+buildModulePage = function(module)
+	if not State.ready or not State.pagesHost then
+		return
+	end
+	mountModule(module)
+end
+
+buildMain = function()
+	if State.main then
+		clearShell()
+	end
+	computeMetrics()
+	State.compact = Metrics.compact
+	State.main = new("Frame", {
+		Name = "Main",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Visible = false,
+		ZIndex = 3,
+	}, State.root)
+	State.mainColumn = new("Frame", {
+		Name = "Window",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(Metrics.width, Metrics.height),
+		BackgroundColor3 = Tokens.base,
+		BorderSizePixel = 0,
+		ClipsDescendants = true,
+		Role = "Panel",
+		ZIndex = 3,
+	}, State.main)
+	new("UICorner", { CornerRadius = UDim.new(0, Metrics.corner), Role = "Corner" }, State.mainColumn)
+	new("UIStroke", {
+		Color = Tokens.textPrimary,
+		Transparency = State.theme.StrokeTransparency,
+		Thickness = 1,
+		Role = "Edge",
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+	}, State.mainColumn)
+
+	local titlebar = buildTitlebar(State.mainColumn)
+	if Metrics.compact then
+		buildCompactNav(State.mainColumn)
+	else
+		buildSidebar(State.mainColumn)
+	end
+	buildContent(State.mainColumn)
+
+	State.pages = {}
+	State.pageMeta = {}
+	State.navRows = {}
+	State.pageIndexById = {}
+	State.activePage = 0
+
+	buildHome(addPage("Home", "quick actions", "home", "home"))
+	buildLoader(addPage("Loader", "loading animation", "ring", "loader"))
+	buildModules(addPage("Modules", "installed scripts", "grid", "modules"))
+	for _, module in ipairs(sortedModules()) do
+		mountModule(module)
+	end
+	buildSettings(addPage("Settings", "appearance and about", "cog", "settings"))
+	setPage(1, true)
+
+	connectShell(titlebar.InputBegan, function(input)
+		if not State.mainVisible or not State.mainColumn then
+			return
+		end
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		local target = input.Target
+		if target and target ~= titlebar and (target:IsA("TextButton") or target:IsA("ImageButton")) then
+			return
+		end
+		local point = Vector2.new(input.Position.X, input.Position.Y)
+		if titlebarBlockedAt(point, titlebar) then
+			return
+		end
+		local ap, as = State.mainColumn.AbsolutePosition, State.mainColumn.AbsoluteSize
+		drag.active = true
+		drag.start = point
+		drag.center = Vector2.new(ap.X + as.X * 0.5, ap.Y + as.Y * 0.5)
+	end)
+	connectShell(UserInputService.InputChanged, function(input)
+		if not drag.active or not State.mainColumn then
+			return
+		end
+		if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		local point = Vector2.new(input.Position.X, input.Position.Y)
+		applyCenter(clampCenter(drag.center + (point - drag.start)))
+	end)
+	connectShell(UserInputService.InputEnded, function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		drag.active = false
+	end)
+
+	updateLayout()
+end
+local function executorFunction(name)
+	local ok, fn = pcall(function()
+		return _G[name]
+	end)
+	if ok and type(fn) == "function" then
+		return fn
+	end
+	return nil
+end
+
+local function buildToast(parent)
+	local group = new("CanvasGroup", {
+		Name = "Toast",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -16, 0, 16),
+		Size = UDim2.new(0, math.min(300, Metrics.viewport.X - 32), 0, 44),
+		BackgroundTransparency = 1,
+		GroupTransparency = 1,
+		Visible = false,
+		ZIndex = 16,
+	}, parent)
+	local card = new("Frame", {
+		Name = "Card",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Tokens.card,
+		BorderSizePixel = 0,
+		Role = "Card",
+	}, group)
+	new("UICorner", { CornerRadius = UDim.new(0, 8), Role = "Small" }, card)
+	new("UIStroke", {
+		Color = Tokens.textPrimary,
+		Transparency = State.theme.StrokeTransparency,
+		Thickness = 1,
+		Role = "Edge",
+	}, card)
+	local stripe = new("Frame", {
+		Name = "Stripe",
+		Size = UDim2.new(0, 2, 1, 0),
+		BackgroundColor3 = Tokens.accent,
+		BorderSizePixel = 0,
+		Role = "Accent",
+		ZIndex = 2,
+	}, group)
+	new("UICorner", { CornerRadius = UDim.new(0, 2), Role = "Small" }, stripe)
+	local label = makeLabel(group, {
+		Name = "Text",
+		Text = "",
+		Tier = "Primary",
+		TextRole = "Caption",
+		Size = UDim2.new(1, -24, 1, 0),
+		Position = UDim2.new(0, 14, 0, 0),
+		Wrapped = true,
+		ZIndex = 2,
+	})
+	State.toastGroup = group
+	State.toastLabel = label
+	State.toastStripe = stripe
+	State.toastSeq = 0
+end
+
+toast = function(text, isError)
+	local group = State.toastGroup
+	if not group or not State.toastLabel then
+		return
+	end
+	State.toastLabel.Text = clean(tostring(text or ""), 140)
+	State.toastLabel.TextColor3 = isError and Color3.fromRGB(255, 140, 140) or Tokens.textPrimary
+	if State.toastStripe then
+		State.toastStripe.BackgroundColor3 = isError and Color3.fromRGB(255, 92, 92) or Tokens.accent
+	end
+	State.toastSeq = State.toastSeq + 1
+	local seq = State.toastSeq
+	group.Visible = true
+	uiTween(group, { GroupTransparency = 0 }, CONFIG.Durations.Fade, CONFIG.Easing.Fade, CONFIG.Easing.FadeDir)
+	playTween(group, ti(duration(0.28), "Quint", "Out"), { Position = UDim2.new(1, -16, 0, 16) })
+	task.delay(2.4, function()
+		if State.destroyed or State.toastSeq ~= seq or not State.toastGroup then
+			return
+		end
+		playTween(State.toastGroup, ti(duration(CONFIG.Durations.Fade), "Quad", "In"), {
+			Position = UDim2.new(1, 56, 0, 16),
+			GroupTransparency = 1,
+		})
+		task.delay(duration(CONFIG.Durations.Fade) + 0.08, function()
+			if State.destroyed or State.toastSeq ~= seq or not State.toastGroup then
+				return
+			end
+			State.toastGroup.Visible = false
+		end)
+	end)
+end
+
+local THEME_SCHEMA = {
 	{ key = "Name", type = "string", maxLen = 32 },
 	{ key = "Mode", type = "enum", options = { "dark", "light" } },
 	{ key = "Accent", type = "color" },
@@ -592,32 +3438,11 @@ local SCHEMA = {
 }
 
 local EASING_NAMES = { "Linear", "Quad", "Cubic", "Quart", "Quint", "Sine", "Exponential", "Circular", "Back", "Bounce", "Elastic" }
-local DIR_NAMES = { "In", "Out", "InOut" }
-
-local EASING_STYLES = {
-	Linear = Enum.EasingStyle.Linear,
-	Quad = Enum.EasingStyle.Quad,
-	Cubic = Enum.EasingStyle.Cubic,
-	Quart = Enum.EasingStyle.Quart,
-	Quint = Enum.EasingStyle.Quint,
-	Sine = Enum.EasingStyle.Sine,
-	Exponential = Enum.EasingStyle.Exponential,
-	Circular = Enum.EasingStyle.Circular,
-	Back = Enum.EasingStyle.Back,
-	Bounce = Enum.EasingStyle.Bounce,
-	Elastic = Enum.EasingStyle.Elastic,
-}
-
-local EASING_DIRS = {
-	In = Enum.EasingDirection.In,
-	Out = Enum.EasingDirection.Out,
-	InOut = Enum.EasingDirection.InOut,
-}
+local DIRECTION_NAMES = { "In", "Out", "InOut" }
 
 local CONFIG_SCHEMA = {
 	{
 		key = "Durations",
-		type = "group",
 		fields = {
 			{ key = "Scale", type = "number", min = 0.1, max = 8 },
 			{ key = "Splash", type = "number", min = 0.05, max = 30 },
@@ -636,386 +3461,78 @@ local CONFIG_SCHEMA = {
 	},
 	{
 		key = "Easing",
-		type = "group",
 		fields = {
 			{ key = "Fill", type = "enum", options = EASING_NAMES },
-			{ key = "FillDir", type = "enum", options = DIR_NAMES },
+			{ key = "FillDir", type = "enum", options = DIRECTION_NAMES },
 			{ key = "Fade", type = "enum", options = EASING_NAMES },
-			{ key = "FadeDir", type = "enum", options = DIR_NAMES },
+			{ key = "FadeDir", type = "enum", options = DIRECTION_NAMES },
 			{ key = "Slide", type = "enum", options = EASING_NAMES },
-			{ key = "SlideDir", type = "enum", options = DIR_NAMES },
+			{ key = "SlideDir", type = "enum", options = DIRECTION_NAMES },
 			{ key = "Pop", type = "enum", options = EASING_NAMES },
-			{ key = "PopDir", type = "enum", options = DIR_NAMES },
+			{ key = "PopDir", type = "enum", options = DIRECTION_NAMES },
 			{ key = "Hover", type = "enum", options = EASING_NAMES },
-			{ key = "HoverDir", type = "enum", options = DIR_NAMES },
+			{ key = "HoverDir", type = "enum", options = DIRECTION_NAMES },
 			{ key = "Press", type = "enum", options = EASING_NAMES },
-			{ key = "PressDir", type = "enum", options = DIR_NAMES },
+			{ key = "PressDir", type = "enum", options = DIRECTION_NAMES },
 			{ key = "Spin", type = "enum", options = EASING_NAMES },
-			{ key = "SpinDir", type = "enum", options = DIR_NAMES },
+			{ key = "SpinDir", type = "enum", options = DIRECTION_NAMES },
 			{ key = "Theme", type = "enum", options = EASING_NAMES },
-			{ key = "ThemeDir", type = "enum", options = DIR_NAMES },
+			{ key = "ThemeDir", type = "enum", options = DIRECTION_NAMES },
 		},
 	},
 	{
 		key = "Layout",
-		type = "group",
 		fields = {
 			{ key = "MaxWidth", type = "number", min = 240, max = 1200 },
-			{ key = "CompactWidth", type = "number", min = 200, max = 900 },
 			{ key = "Padding", type = "number", min = 0, max = 64 },
 			{ key = "Gap", type = "number", min = 0, max = 48 },
 			{ key = "CornerRadius", type = "number", min = 0, max = 40 },
-			{ key = "SmallCornerRadius", type = "number", min = 0, max = 40 },
-			{ key = "TitleSize", type = "number", min = 12, max = 48 },
-			{ key = "BodySize", type = "number", min = 12, max = 32 },
-			{ key = "CaptionSize", type = "number", min = 12, max = 24 },
-			{ key = "ButtonHeight", type = "number", min = 24, max = 72 },
-			{ key = "RowHeight", type = "number", min = 28, max = 96 },
-			{ key = "InputHeight", type = "number", min = 24, max = 80 },
 			{ key = "MinScale", type = "number", min = 0.3, max = 1 },
 		},
 	},
-	{ key = "Theme", type = "theme" },
 }
 
-local PLAYER
-local PLAYER_GUI
-local Gui
-local Root
-local RootScale
-local Backdrop
-local Stage
-local Main
-local MainColumn
-local MainScale
-local SidebarPanel
-local ContentPanel
-local BannerTitle
-local BannerSubtitle
-local NavList
-local NavPill
-local NavIndicator
-local Customize
-local CancelWindowDrag
-local DebugFrame
-local CountdownLabel
-local ToastGroup
-local ToastLabel
-local ToastStripe
-local ToastSeq = 0
-local Blur
-local CURRENT_THEME = copyTable(CONFIG.Theme)
-local TC = {}
-local QUALITY = { Blur = true, Instant = false, DurationScale = 1, ScalePop = true }
-local TOKEN = 0
-local PLAYING = false
-local DESTROYED = false
-local ACTIVE_SPEED = 1
-local MainVisible = false
-local REFRESH = {}
-local CONNS = {}
-local TWEENS = {}
-local STAGE_TWEENS = {}
-local PETAL_TWEENS = {}
-local STAGE_CONNS = {}
-local DebugState = { conn = nil, visible = false, clock = 0, frames = 0, fps = 0, instances = nil, instClock = 0 }
-local GalleryState = { speed = 1, loop = false, countdown = true }
-local AutoExecute = false
-
-
-local function dur(v)
-	return v * CONFIG.Durations.Scale * QUALITY.DurationScale / ACTIVE_SPEED
-end
-
-local function mdur(v)
-	return v * CONFIG.Durations.Scale * QUALITY.DurationScale / ACTIVE_SPEED
-end
-
-local function ti(v, style, dir, repeatCount, reverses, delayTime)
-	local s = EASING_STYLES[style] or Enum.EasingStyle.Quad
-	local d = EASING_DIRS[dir] or Enum.EasingDirection.Out
-	return TweenInfo.new(math.max(0.01, v), s, d, repeatCount or 0, reverses or false, delayTime or 0)
-end
-
-local function trackConn(c)
-	for i = #CONNS, 1, -1 do
-		local item = CONNS[i]
-		if item.Connected == false then
-			table.remove(CONNS, i)
-		end
-	end
-	table.insert(CONNS, c)
-	return c
-end
-
-local function trackStageConn(c)
-	table.insert(STAGE_CONNS, c)
-	return c
-end
-
-local TWEEN_INDEX = setmetatable({}, { __mode = "k" })
-
-local function cancelPropTweens(target, props)
-	local index = TWEEN_INDEX[target]
-	if not index then
-		return
-	end
-	for key in pairs(props) do
-		local existing = index[key]
-		if existing then
-			index[key] = nil
-			pcall(function()
-				existing:Cancel()
-			end)
-		end
-	end
-end
-
-local function playTween(target, info, props, list)
-	if DESTROYED or target == nil then
-		return nil
-	end
-	cancelPropTweens(target, props)
-	local ok, tw = pcall(function()
-		return TweenService:Create(target, info, props)
-	end)
-	if not ok or tw == nil then
-		return nil
-	end
-	local played = pcall(function()
-		tw:Play()
-	end)
-	if not played then
-		return nil
-	end
-	local index = TWEEN_INDEX[target]
-	if not index then
-		index = {}
-		TWEEN_INDEX[target] = index
-	end
-	for key in pairs(props) do
-		index[key] = tw
-	end
-	local store = list or TWEENS
-	for i = #store, 1, -1 do
-		local item = store[i]
-		if item.PlaybackState ~= Enum.PlaybackState.Playing then
-			table.remove(store, i)
-		end
-	end
-	table.insert(store, tw)
-	return tw
-end
-
-local function uiTween(target, props, duration, style, dir)
-	if target == nil then
-		return nil
-	end
-	return playTween(target, ti(mdur(duration or CONFIG.Durations.Hover), style or "Quad", dir or "Out"), props)
-end
-
-local function cancelList(list)
-	for i = #list, 1, -1 do
-		local tw = list[i]
-		pcall(function()
-			tw:Cancel()
-		end)
-		table.remove(list, i)
-	end
-end
-
-local function hoverTime(entering)
-	local base = CONFIG.Durations.Hover
-	return entering and base * 0.6 or base * 1.25
-end
-
-local function hoverTween(target, props, entering)
-	return uiTween(target, props, hoverTime(entering), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
-end
-
-local function new(class, props, parent)
-	local inst = Instance.new(class)
-	if props then
-		for k, v in pairs(props) do
-			if k ~= "Parent" and k ~= "Role" and k ~= "Tier" and k ~= "TextRole" and k ~= "ImageRole" and k ~= "Pooled" then
-				inst[k] = v
-			end
-		end
-		if props.Role then
-			inst:SetAttribute("Role", props.Role)
-		end
-		if props.Tier then
-			inst:SetAttribute("Tier", props.Tier)
-		end
-		if props.TextRole then
-			inst:SetAttribute("TextRole", props.TextRole)
-		end
-		if props.ImageRole then
-			inst:SetAttribute("ImageRole", props.ImageRole)
-		end
-		if props.Pooled then
-			inst:SetAttribute("Pooled", true)
-		end
-	end
-	if parent then
-		inst.Parent = parent
-	end
-	return inst
-end
-
-local ThemeCache = {
-	list = nil,
-	fonts = {},
-	animated = {
-		Panel = true,
-		Sidebar = true,
-		Card = true,
-		Surface = true,
-		Backdrop = true,
-		Input = true,
-		Button = true,
-	},
-}
-
-local function themeFont()
-	local name = tostring(CURRENT_THEME.Font or "")
-	local cached = ThemeCache.fonts[name]
-	if cached then
-		return cached
-	end
-	local ok, f = pcall(function()
-		return Enum.Font[name]
-	end)
-	f = (ok and f) or Enum.Font.GothamMedium
-	ThemeCache.fonts[name] = f
-	return f
-end
-
-local function boldFont()
-	local name = CURRENT_THEME.Font
-	if name == "Gotham" or name == "GothamMedium" or name == "GothamBold" then
-		return Enum.Font.GothamBold
-	end
-	return themeFont()
-end
-
-local function tierColor(tier)
-	if tier == "Secondary" then
-		return TC.textSecondary
-	elseif tier == "Disabled" then
-		return TC.textDisabled
-	elseif tier == "Accent" then
-		return TC.accent
-	elseif tier == "OnAccent" then
-		return TC.onAccent
-	end
-	return TC.textPrimary
-end
-
-local function textRoleSize(role, L)
-	if role == "Title" then
-		return L.TitleSize
-	elseif role == "Caption" then
-		return L.CaptionSize
-	end
-	return L.BodySize
-end
-
-local function refreshAll()
-	for i = #REFRESH, 1, -1 do
-		local fn = REFRESH[i]
-		local ok = pcall(fn)
-		if not ok then
-			table.remove(REFRESH, i)
-		end
-	end
-end
-
-local function recomputeColors(th)
-	TC = {
-		accent = hexToColor(th.Accent),
-		base = hexToColor(th.Base),
-		textPrimary = hexToColor(th.TextPrimary),
-		textSecondary = hexToColor(th.TextSecondary),
-		textDisabled = hexToColor(th.TextDisabled),
-		onAccent = th.Mode == "dark" and Color3.fromRGB(28, 8, 18) or Color3.new(1, 1, 1),
-		dim = hexToColor(th.DimColor),
-		track = hexToColor(th.ProgressTrack),
-		fill = hexToColor(th.ProgressFill),
-		skeleton = hexToColor(th.SkeletonBase),
-		shimmer = hexToColor(th.SkeletonHighlight),
-		gradientTop = hexToColor(th.GradientTop),
-		sidebar = hexToColor(th.SidebarColor or th.Base),
-		card = hexToColor(th.CardColor or th.Base),
-		divider = hexToColor(th.DividerColor or th.ProgressTrack),
-		bannerA = hexToColor(th.BannerA or th.Accent),
-		bannerB = hexToColor(th.BannerB or th.ProgressFill),
-		bannerC = hexToColor(th.BannerC or th.Base),
-	}
-	local dark = th.Mode == "dark"
-	TC.button = mixColor(TC.base, TC.textPrimary, dark and 0.08 or 0.05)
-	TC.buttonHover = mixColor(TC.base, TC.textPrimary, dark and 0.13 or 0.09)
-	TC.buttonPressed = mixColor(TC.base, TC.textPrimary, dark and 0.18 or 0.13)
-	TC.accentHover = mixColor(TC.accent, Color3.new(1, 1, 1), 0.14)
-	TC.accentPressed = mixColor(TC.accent, Color3.new(0, 0, 0), 0.12)
-end
-
-local function checkValue(v, f)
-	if f.type == "number" then
-		if type(v) ~= "number" then
-			return false, nil, "must be a number"
-		end
-		if v ~= v or v == math.huge or v == -math.huge then
+local function checkValue(value, field)
+	if field.type == "number" then
+		if type(value) ~= "number" or value ~= value then
 			return false, nil, "must be a finite number"
 		end
-		local c = clampNum(v, f.min, f.max)
-		if c ~= v then
-			return true, c, f.key .. " clamped to " .. tostring(c)
+		local clamped = clamp(value, field.min, field.max)
+		return true, clamped, clamped ~= value and (field.key .. " clamped to " .. tostring(clamped)) or nil
+	elseif field.type == "string" then
+		if type(value) ~= "string" then
+			return false, nil, "must be a string"
 		end
-		return true, c, nil
-	elseif f.type == "bool" then
-		if type(v) ~= "boolean" then
-			return false, nil, "must be true or false"
+		return true, clean(value, field.maxLen or 32)
+	elseif field.type == "color" then
+		if not isHex(value) then
+			return false, nil, "must be a #RRGGBB colour"
 		end
-		return true, v, nil
-	elseif f.type == "enum" then
-		if type(v) ~= "string" then
-			return false, nil, "must be one of " .. table.concat(f.options, ", ")
+		return true, string.upper(value)
+	elseif field.type == "enum" then
+		if type(value) ~= "string" then
+			return false, nil, "must be one of " .. table.concat(field.options, ", ")
 		end
-		local s = sanitizeString(v, 32)
-		for _, opt in ipairs(f.options) do
-			if s == opt then
-				return true, s, nil
+		for _, option in ipairs(field.options) do
+			if value == option then
+				return true, value
 			end
 		end
-		return false, nil, "must be one of " .. table.concat(f.options, ", ")
-	elseif f.type == "color" then
-		if type(v) ~= "string" then
-			return false, nil, "must be a hex color like #4FC3F7"
+		return false, nil, "must be one of " .. table.concat(field.options, ", ")
+	elseif field.type == "bool" then
+		if type(value) ~= "boolean" then
+			return false, nil, "must be true or false"
 		end
-		local s = sanitizeString(v, 8)
-		if not isHexColor(s) then
-			return false, nil, "must be a hex color like #4FC3F7"
-		end
-		return true, string.upper(s), nil
-	elseif f.type == "image" then
-		if type(v) ~= "string" and type(v) ~= "number" then
-			return false, nil, "must be a numeric asset id"
-		end
-		local s = sanitizeString(tostring(v), 64)
-		local id = s:match("^rbxassetid://(%d+)$") or s:match("^(%d+)$")
+		return true, value
+	elseif field.type == "image" then
+		local text = tostring(value or "")
+		local id = text:match("^rbxassetid://(%d+)$") or text:match("^(%d+)$")
 		if not id then
 			return false, nil, "must be a numeric asset id"
 		end
-		return true, id, nil
-	elseif f.type == "string" then
-		if type(v) ~= "string" then
-			return false, nil, "must be a string"
-		end
-		local s = sanitizeString(v, f.maxLen or 32)
-		return true, s, nil
+		return true, id
 	end
-	return false, nil, "is not supported"
+	return false, nil, "has an unsupported type"
 end
 
 local function validateFields(data, schema, defaults)
@@ -1025,45 +3542,28 @@ local function validateFields(data, schema, defaults)
 	if type(data) ~= "table" then
 		return nil, { "value must be a JSON object" }, {}
 	end
-	for _, f in ipairs(schema) do
-		local v = data[f.key]
-		if v == nil then
-			out[f.key] = defaults[f.key]
+	for _, field in ipairs(schema) do
+		local value = data[field.key]
+		if value == nil then
+			out[field.key] = defaults[field.key]
 		else
-			local ok, val, msg = checkValue(v, f)
+			local ok, result, note = checkValue(value, field)
 			if ok then
-				out[f.key] = val
-				if msg then
-					table.insert(notes, msg)
+				out[field.key] = result
+				if note then
+					table.insert(notes, note)
 				end
 			else
-				out[f.key] = defaults[f.key]
-				table.insert(errors, f.key .. " " .. msg)
+				out[field.key] = defaults[field.key]
+				table.insert(errors, field.key .. " " .. note)
 			end
 		end
-	end
-	local unknown = {}
-	for k in pairs(data) do
-		local found = false
-		for _, f in ipairs(schema) do
-			if f.key == k then
-				found = true
-				break
-			end
-		end
-		if not found then
-			table.insert(unknown, sanitizeString(tostring(k), 40))
-		end
-	end
-	table.sort(unknown)
-	if #unknown > 0 then
-		table.insert(notes, "ignored fields: " .. table.concat(unknown, ", "))
 	end
 	return out, errors, notes
 end
 
 local function validateTheme(data)
-	return validateFields(data, SCHEMA, CONFIG.Theme)
+	return validateFields(data, THEME_SCHEMA, BASE_THEME)
 end
 
 local function validateConfig(data)
@@ -1074,78 +3574,56 @@ local function validateConfig(data)
 		return nil, { "value must be a JSON object" }, {}
 	end
 	for _, group in ipairs(CONFIG_SCHEMA) do
-		if group.type == "group" then
-			local raw = data[group.key]
-			if raw ~= nil then
-				if type(raw) ~= "table" then
-					table.insert(errors, group.key .. " must be a JSON object")
-				else
-					local clean = copyTable(CONFIG[group.key])
-					for _, f in ipairs(group.fields) do
-						local v = raw[f.key]
-						if v ~= nil then
-							local ok, val, msg = checkValue(v, f)
-							if ok then
-								clean[f.key] = val
-								if msg then
-									table.insert(notes, msg)
-								end
-							else
-								table.insert(errors, group.key .. "." .. f.key .. " " .. msg)
+		local raw = data[group.key]
+		if raw ~= nil then
+			if type(raw) ~= "table" then
+				table.insert(errors, group.key .. " must be an object")
+			else
+				local result = copy(CONFIG[group.key])
+				for _, field in ipairs(group.fields) do
+					local value = raw[field.key]
+					if value ~= nil then
+						local ok, checked, note = checkValue(value, field)
+						if ok then
+							result[field.key] = checked
+							if note then
+								table.insert(notes, group.key .. "." .. note)
 							end
+						else
+							table.insert(errors, group.key .. "." .. field.key .. " " .. note)
 						end
 					end
-					out[group.key] = clean
 				end
-			end
-		elseif group.type == "theme" then
-			local raw = data[group.key]
-			if raw ~= nil then
-				local clean, themeErrors, themeNotes = validateTheme(raw)
-				for _, e in ipairs(themeErrors) do
-					table.insert(errors, "Theme." .. e)
-				end
-				for _, n in ipairs(themeNotes) do
-					table.insert(notes, "Theme " .. n)
-				end
-				if clean then
-					out.Theme = clean
-				end
+				out[group.key] = result
 			end
 		end
 	end
-	local unknown = {}
-	for k in pairs(data) do
-		local found = false
-		for _, g in ipairs(CONFIG_SCHEMA) do
-			if g.key == k then
-				found = true
-				break
+	if data.Theme ~= nil then
+		if type(data.Theme) ~= "table" then
+			table.insert(errors, "Theme must be an object")
+		else
+			local theme, themeErrors, themeNotes = validateTheme(data.Theme)
+			if theme then
+				out.Theme = theme
+			end
+			for _, message in ipairs(themeErrors) do
+				table.insert(errors, "Theme." .. message)
+			end
+			for _, message in ipairs(themeNotes) do
+				table.insert(notes, "Theme." .. message)
 			end
 		end
-		if not found then
-			table.insert(unknown, sanitizeString(tostring(k), 40))
-		end
-	end
-	table.sort(unknown)
-	if #unknown > 0 then
-		table.insert(notes, "ignored fields: " .. table.concat(unknown, ", "))
 	end
 	return out, errors, notes
 end
 
-local function themeToJSON(th)
+local function themeToJSON(theme)
 	local ordered = {}
-	for _, f in ipairs(SCHEMA) do
-		ordered[f.key] = th[f.key]
+	for _, field in ipairs(THEME_SCHEMA) do
+		ordered[field.key] = theme[field.key]
 	end
-	local ok, json = pcall(function()
-		return HttpService:JSONEncode(ordered)
-	end)
-	if ok and type(json) == "string" then
-		return json
-	end
-	return "{}"
+	local ok, json = pcall(HttpService.JSONEncode, HttpService, ordered)
+	return ok and json or "{}"
 end
 
 local function decodeJSON(text)
@@ -1155,98 +3633,94 @@ local function decodeJSON(text)
 	if #text > 40000 then
 		return nil, "input too large"
 	end
-	local ok, result = pcall(function()
-		return HttpService:JSONDecode(text)
-	end)
-	if not ok then
-		return nil, "invalid JSON"
-	end
-	if type(result) ~= "table" then
-		return nil, "top level must be a JSON object"
+	local ok, result = pcall(HttpService.JSONDecode, HttpService, text)
+	if not ok or type(result) ~= "table" then
+		return nil, "invalid JSON object"
 	end
 	return result, nil
 end
 
-local SkinStore = { Folder = "Blossom", File = "Blossom/themes.txt" }
-
-function SkinStore.fn(name)
-	local ok, fn = pcall(function()
-		return _G[name]
-	end)
-	if ok and type(fn) == "function" then
-		return fn
+local function preloadThemeImages(theme)
+	local urls = {}
+	for _, key in ipairs({ "BackgroundImage", "LogoImage", "SpinnerImage", "TextureImage" }) do
+		local id = theme[key]
+		if type(id) == "string" and id ~= "" then
+			table.insert(urls, "rbxassetid://" .. id)
+		end
 	end
-	return nil
+	if #urls > 0 then
+		task.spawn(function()
+			pcall(function()
+				ContentProvider:PreloadAsync(urls)
+			end)
+		end)
+	end
 end
 
-function SkinStore.read()
-	local readfile = SkinStore.fn("readfile")
+local PROFILE_FOLDER = "Blossom"
+local PROFILE_FILE = "Blossom/profile.json"
+
+local function readProfileFile()
+	local readfile = executorFunction("readfile")
+	local isfile = executorFunction("isfile")
 	if not readfile then
 		return nil
 	end
-	local isfile = SkinStore.fn("isfile")
 	if isfile then
-		local okCheck, exists = pcall(isfile, SkinStore.File)
-		if not okCheck or not exists then
+		local ok, exists = pcall(isfile, PROFILE_FILE)
+		if not ok or not exists then
 			return nil
 		end
 	end
-	local ok, data = pcall(readfile, SkinStore.File)
+	local ok, data = pcall(readfile, PROFILE_FILE)
 	if ok and type(data) == "string" and #data > 0 and #data <= 40000 then
 		return data
 	end
 	return nil
 end
 
-function SkinStore.write(json)
-	local writefile = SkinStore.fn("writefile")
+local function writeProfileFile(json)
+	local writefile = executorFunction("writefile")
 	if not writefile then
 		return false
 	end
-	local makefolder = SkinStore.fn("makefolder")
-	local isfolder = SkinStore.fn("isfolder")
+	local makefolder = executorFunction("makefolder")
+	local isfolder = executorFunction("isfolder")
 	if makefolder and isfolder then
-		local okCheck, exists = pcall(isfolder, SkinStore.Folder)
-		if not okCheck or not exists then
-			pcall(makefolder, SkinStore.Folder)
+		local ok, exists = pcall(isfolder, PROFILE_FOLDER)
+		if not ok or not exists then
+			pcall(makefolder, PROFILE_FOLDER)
 		end
 	end
-	return pcall(writefile, SkinStore.File, json) == true
+	return pcall(writefile, PROFILE_FILE, json) == true
 end
 
-local function saveCustomSkins()
-	if not PLAYER then
+saveProfile = function()
+	if not State.player then
 		return
 	end
 	local payload = {
-		active = PLAYER:GetAttribute("BlossomSkin") or CURRENT_THEME.Name,
-		autoExecute = AutoExecute,
+		active = State.theme.Name,
+		autoExecute = State.autoExecute,
 		themes = {},
 	}
-	local count = 0
-	for _, skinName in ipairs(skinNames()) do
-		if not BUILTIN_SKINS[skinName] then
-			payload.themes[skinName] = SKINS[skinName]
-			count = count + 1
+	for _, name in ipairs(skinNames()) do
+		if not BUILTIN_SKINS[name] then
+			payload.themes[name] = SKINS[name]
 		end
 	end
-	local ok, json = pcall(function()
-		return HttpService:JSONEncode(payload)
-	end)
+	local ok, json = pcall(HttpService.JSONEncode, HttpService, payload)
 	if not ok or type(json) ~= "string" then
 		return
 	end
-	PLAYER:SetAttribute("BlossomThemes", json)
-	SkinStore.write(json)
+	State.player:SetAttribute("BlossomProfile", json)
+	writeProfileFile(json)
 end
 
-local function loadCustomSkins()
-	if not PLAYER then
-		return
-	end
-	local raw = SkinStore.read()
-	if not raw then
-		raw = PLAYER:GetAttribute("BlossomThemes")
+loadProfile = function()
+	local raw = readProfileFile()
+	if not raw and State.player then
+		raw = State.player:GetAttribute("BlossomProfile")
 	end
 	if type(raw) ~= "string" or raw == "" then
 		return
@@ -1255,2849 +3729,77 @@ local function loadCustomSkins()
 	if not data then
 		return
 	end
-	local themes = data.themes
-	if type(themes) ~= "table" then
-		themes = data
-	end
-	for name, theme in pairs(themes) do
-		if type(name) == "string" and type(theme) == "table" then
-			local clean, errors = validateTheme(theme)
-			if clean and #errors == 0 then
-				registerSkin(name, clean)
+	if type(data.themes) == "table" then
+		for name, theme in pairs(data.themes) do
+			if type(name) == "string" and type(theme) == "table" then
+				local validated, errors = validateTheme(theme)
+				if validated and #errors == 0 then
+					registerSkin(name, validated)
+				end
 			end
 		end
 	end
+	State.autoExecute = data.autoExecute == true
 	if type(data.active) == "string" and SKINS[data.active] then
-		PLAYER:SetAttribute("BlossomSkin", data.active)
-	end
-	AutoExecute = data.autoExecute == true
-	PLAYER:SetAttribute("BlossomThemes", raw)
-end
-
-local function strokeSpec(role)
-	local t = CURRENT_THEME
-	if role == "Accent" then
-		return TC.accent, 0.35
-	elseif role == "Focus" then
-		return TC.accent, 0.12
-	elseif role == "Selected" then
-		return TC.accent, 0.4
-	elseif role == "Plain" then
-		return TC.divider, 0.6
-	elseif role == "CardEdge" then
-		return TC.textPrimary, math.min(1, t.StrokeTransparency + 0.04)
-	elseif role == "Soft" then
-		return TC.textPrimary, math.min(1, t.StrokeTransparency + 0.03)
-	end
-	return TC.textPrimary, t.StrokeTransparency
-end
-
-local function strokeApply(stroke, role)
-	local color, alpha = strokeSpec(role)
-	stroke.Color = color
-	stroke.Transparency = alpha
-	stroke.Thickness = math.max(1, CURRENT_THEME.StrokeThickness)
-end
-
-local function gradientApply(grad, role)
-	local th = CURRENT_THEME
-	if role == "Banner" then
-		grad.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, TC.bannerB),
-			ColorSequenceKeypoint.new(0.55, TC.bannerA),
-			ColorSequenceKeypoint.new(1, TC.bannerC),
-		})
-		grad.Transparency = NumberSequence.new(0)
-		grad.Rotation = 24
-	elseif role == "BannerWave" then
-		grad.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, TC.bannerB),
-			ColorSequenceKeypoint.new(0.5, TC.bannerA),
-			ColorSequenceKeypoint.new(1, TC.bannerC),
-		})
-		grad.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.1),
-			NumberSequenceKeypoint.new(0.55, 0.5),
-			NumberSequenceKeypoint.new(1, 1),
-		})
-		grad.Rotation = 112
-	elseif role == "BannerScrim" then
-		grad.Color = ColorSequence.new(TC.base)
-		grad.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.24),
-			NumberSequenceKeypoint.new(0.6, 0.7),
-			NumberSequenceKeypoint.new(1, 0.98),
-		})
-		grad.Rotation = 90
-	elseif role == "Header" then
-		grad.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, TC.accent),
-			ColorSequenceKeypoint.new(0.55, TC.bannerA),
-			ColorSequenceKeypoint.new(1, TC.base),
-		})
-		grad.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.82),
-			NumberSequenceKeypoint.new(0.5, 0.95),
-			NumberSequenceKeypoint.new(1, 1),
-		})
-		grad.Rotation = 12
-	elseif role == "Shimmer" then
-		grad.Color = ColorSequence.new(TC.shimmer)
-		grad.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(0.45, th.ShimmerTransparency),
-			NumberSequenceKeypoint.new(0.6, th.ShimmerTransparency),
-			NumberSequenceKeypoint.new(1, 1),
-		})
-		grad.Rotation = 0
-	else
-		grad.Color = ColorSequence.new(TC.gradientTop)
-		grad.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, th.GradientTopTransparency),
-			NumberSequenceKeypoint.new(1, th.GradientBottomTransparency),
-		})
-		grad.Rotation = 90
+		State.profileSkin = data.active
 	end
 end
 
-local manageBlur
-
-local function strokeColorFor(role)
-	local color = strokeSpec(role)
-	return color
-end
-
-local function strokeTransparencyFor(role)
-	local _, alpha = strokeSpec(role)
-	return alpha
-end
-
-local function sameValue(a, b)
-	if typeof(a) ~= typeof(b) then
-		return false
-	end
-	if typeof(a) == "Color3" then
-		return math.abs(a.R - b.R) < 0.004 and math.abs(a.G - b.G) < 0.004 and math.abs(a.B - b.B) < 0.004
-	end
-	return a == b
-end
-
-local THEME_TWEENS = {}
-
-local function applyTheme(th, animated)
-	cancelList(THEME_TWEENS)
-	CURRENT_THEME = copyTable(th)
-	recomputeColors(CURRENT_THEME)
-	if PLAYING then
-		animated = false
-	end
-	local infoUse = ti(dur(CONFIG.Durations.ThemeCrossfade), CONFIG.Easing.Theme, CONFIG.Easing.ThemeDir)
-	local function set(inst, prop, value)
-		if animated and ThemeCache.animated[inst:GetAttribute("Role")] then
-			local fetched, current = pcall(function()
-				return inst[prop]
-			end)
-			if fetched and current ~= nil and sameValue(current, value) then
-				return
-			end
-			playTween(inst, infoUse, { [prop] = value }, THEME_TWEENS)
-		else
-			inst[prop] = value
-		end
-	end
-	local function setNow(inst, prop, value)
-		inst[prop] = value
-	end
-	local t = CURRENT_THEME
-	local function styleAll()
-	local list = ThemeCache.list
-	if not list then
-		if not Gui then
-			return
-		end
-		list = Gui:GetDescendants()
-		ThemeCache.list = list
-	end
-	for _, d in ipairs(list) do
-		local role = d:GetAttribute("Role")
-		if d:IsA("UIStroke") then
-			strokeApply(d, role)
-		elseif d:IsA("UIGradient") then
-			gradientApply(d, role)
-		elseif d:IsA("UICorner") then
-			local r = t.CornerRadius
-			if role == "Small" then
-				r = math.min(r, CONFIG.Layout.SmallCornerRadius)
-			elseif role == "Dot" then
-				r = 999
-			end
-			setNow(d, "CornerRadius", UDim.new(0, r))
-		elseif d:IsA("UIListLayout") then
-			if role == "Gap" then
-				setNow(d, "Padding", UDim.new(0, t.Spacing))
-			end
-		elseif d:IsA("UIPadding") then
-			if role == "Pad" then
-				setNow(d, "PaddingTop", UDim.new(0, t.Spacing))
-				setNow(d, "PaddingBottom", UDim.new(0, t.Spacing))
-				setNow(d, "PaddingLeft", UDim.new(0, t.Spacing))
-				setNow(d, "PaddingRight", UDim.new(0, t.Spacing))
-			end
-		elseif d:IsA("Frame") or d:IsA("TextButton") or d:IsA("TextLabel") or d:IsA("TextBox") or d:IsA("ImageLabel") or d:IsA("ImageButton") then
-			if role == "Panel" then
-				set(d, "BackgroundColor3", TC.base)
-				set(d, "BackgroundTransparency", t.PanelTransparency)
-			elseif role == "Sidebar" then
-				set(d, "BackgroundColor3", TC.sidebar)
-				set(d, "BackgroundTransparency", 0)
-			elseif role == "Card" then
-				set(d, "BackgroundColor3", TC.card)
-				set(d, "BackgroundTransparency", t.CardTransparency)
-			elseif role == "Button" then
-				set(d, "BackgroundColor3", TC.button)
-				set(d, "BackgroundTransparency", 0)
-			elseif role == "Ghost" then
-				set(d, "BackgroundColor3", TC.button)
-				set(d, "BackgroundTransparency", 0.94)
-			elseif role == "Input" then
-				set(d, "BackgroundColor3", TC.base)
-				set(d, "BackgroundTransparency", 0)
-			elseif role == "Divider" then
-				set(d, "BackgroundColor3", TC.divider)
-			elseif role == "SliderKnob" then
-				set(d, "BackgroundColor3", TC.textPrimary)
-			elseif role == "Backdrop" then
-				local level = d:GetAttribute("BackdropLevel")
-				if level == "loading" then
-					set(d, "BackgroundColor3", hexToColor(CONFIG.Loading.BackdropColor))
-					set(d, "BackgroundTransparency", CONFIG.Loading.BackdropTransparency)
-				elseif level == "main" then
-					set(d, "BackgroundColor3", TC.dim)
-					set(d, "BackgroundTransparency", 1)
-				else
-					set(d, "BackgroundColor3", TC.dim)
-					set(d, "BackgroundTransparency", t.DimTransparency)
-				end
-			elseif role == "Accent" then
-				set(d, "BackgroundColor3", TC.accent)
-			elseif role == "Track" then
-				set(d, "BackgroundColor3", TC.track)
-			elseif role == "Fill" then
-				set(d, "BackgroundColor3", TC.fill)
-			elseif role == "Skeleton" then
-				set(d, "BackgroundColor3", TC.skeleton)
-			elseif role == "Knob" then
-				local parentOn = d.Parent and d.Parent:GetAttribute("On") == true
-				set(d, "BackgroundColor3", parentOn and TC.onAccent or TC.textSecondary)
-			elseif role == "Surface" then
-				set(d, "BackgroundColor3", TC.base)
-			end
-		end
-		if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
-			local tier = d:GetAttribute("Tier") or "Primary"
-			local textRole = d:GetAttribute("TextRole")
-			local size = textRoleSize(textRole, CONFIG.Layout)
-			if d:GetAttribute("Bold") == true then
-				setNow(d, "Font", boldFont())
-			else
-				setNow(d, "Font", themeFont())
-			end
-			if d:GetAttribute("FixedSize") ~= true and d.Name ~= "Countdown" then
-				setNow(d, "TextSize", size)
-			end
-			if tier == "OnAccent" then
-				local bgRole = d:GetAttribute("Role") or (d.Parent and d.Parent:GetAttribute("Role"))
-				if bgRole ~= "Accent" then
-					set(d, "TextColor3", tierColor("Primary"))
-				else
-					set(d, "TextColor3", TC.onAccent)
-				end
-			else
-				set(d, "TextColor3", tierColor(tier))
-			end
-			if d:IsA("TextBox") then
-				set(d, "PlaceholderColor3", TC.textSecondary)
-			end
-		end
-		if d:IsA("ImageLabel") or d:IsA("ImageButton") then
-			local imageRole = d:GetAttribute("ImageRole")
-			if imageRole == "Background" and t.BackgroundImage ~= "" then
-				set(d, "Image", "rbxassetid://" .. t.BackgroundImage)
-			elseif imageRole == "Logo" then
-				if t.LogoImage ~= "" then
-					set(d, "Image", "rbxassetid://" .. t.LogoImage)
-				end
-			elseif imageRole == "Spinner" and t.SpinnerImage ~= "" then
-				set(d, "Image", "rbxassetid://" .. t.SpinnerImage)
-			elseif imageRole == "Texture" and t.TextureImage ~= "" then
-				set(d, "Image", "rbxassetid://" .. t.TextureImage)
-			end
-		end
-	end
-	end
-	pcall(styleAll)
-	manageBlur()
-	refreshAll()
-end
-
-local LoadingActive = false
-local LoadingLogo
-local LoadingRotor
-local LogoSpinTween
-local LogoFloatTween
-
-manageBlur = function()
-	local t = CURRENT_THEME
-	local seeThrough = (tonumber(CONFIG.Loading.BackdropTransparency) or 0) > 0.45
-	local want = QUALITY.Blur and t.BlurEnabled and LoadingActive and seeThrough
-	if want then
-		if not Blur then
-			Blur = new("BlurEffect", { Name = "BlossomBlur", Size = 0, Enabled = true }, Lighting)
-			playTween(Blur, ti(dur(CONFIG.Durations.Fade), "Quad", "Out"), { Size = t.BlurSize })
-		else
-			playTween(Blur, ti(dur(CONFIG.Durations.Fade), "Quad", "Out"), { Size = t.BlurSize })
-		end
-	elseif Blur then
-		local ref = Blur
-		playTween(ref, ti(dur(CONFIG.Durations.Fade), "Quad", "In"), { Size = 0 })
-		local delayTime = dur(CONFIG.Durations.Fade) + 0.1
-		task.delay(delayTime, function()
-			if DESTROYED then
-				return
-			end
-			if Blur == ref then
-				ref:Destroy()
-				Blur = nil
-			end
-		end)
-	end
-end
-
-local function setBackdrop(level)
-	if not Backdrop then
-		return
-	end
-	Backdrop:SetAttribute("BackdropLevel", level)
-	Backdrop.Visible = true
-	local t = CURRENT_THEME
-	local color = TC.dim
-	local target = t.DimTransparency
-	if level == "loading" then
-		color = hexToColor(CONFIG.Loading.BackdropColor)
-		target = CONFIG.Loading.BackdropTransparency
-	elseif level == "main" then
-		target = 1
-	end
-	uiTween(Backdrop, { BackgroundTransparency = target, BackgroundColor3 = color }, CONFIG.Durations.Fade, CONFIG.Easing.Fade, CONFIG.Easing.FadeDir)
-end
-
-local function preloadThemeImages(th)
-	local urls = {}
-	for _, key in ipairs({ "BackgroundImage", "LogoImage", "SpinnerImage", "TextureImage" }) do
-		local id = th[key]
-		if type(id) == "string" and id ~= "" then
-			table.insert(urls, "rbxassetid://" .. id)
-		end
-	end
-	if #urls == 0 then
-		return true
-	end
-	local done = false
-	task.spawn(function()
-		pcall(function()
-			ContentProvider:PreloadAsync(urls)
-		end)
-		done = true
-	end)
-	local started = os.clock()
-	while not done and os.clock() - started < CONFIG.Durations.PreloadTimeout do
-		task.wait(0.05)
-	end
-	return done
-end
-
-local function viewportSize()
-	local cam = workspace.CurrentCamera
-	if cam then
-		return cam.ViewportSize
-	end
-	return Vector2.new(1280, 720)
-end
-
-local function updateRootScale()
-	if not RootScale then
-		return
-	end
-	local vp = viewportSize()
-	local s = math.min(vp.X / 760, vp.Y / 520)
-	RootScale.Scale = clampNum(s, CONFIG.Layout.MinScale, 1)
-end
-
-local function fitWidth(w)
-	if not RootScale then
-		return w
-	end
-	local vp = viewportSize()
-	local avail = vp.X / math.max(0.1, RootScale.Scale) - 32
-	return math.max(160, math.min(w, avail))
-end
-
-local function makeLabel(props, parent)
-	local p = props or {}
-	local L = CONFIG.Layout
-	local textRole = p.TextRole
-	local tier = p.Tier or "Primary"
-	local size = p.TextSize or textRoleSize(textRole, L)
-	local built = {
-		Name = p.Name or "Label",
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Size = p.Size or UDim2.new(1, 0, 0, size + 6),
-		Text = p.Text or "",
-		Font = themeFont(),
-		TextSize = size,
-		TextColor3 = p.Color or tierColor(tier),
-		TextXAlignment = p.TextXAlignment or Enum.TextXAlignment.Left,
-		TextYAlignment = Enum.TextYAlignment.Center,
-		TextWrapped = p.TextWrapped == true,
-		LayoutOrder = p.LayoutOrder or 0,
-		Tier = tier,
-		Role = p.Role,
-		TextRole = textRole,
-	}
-	if p.Position then
-		built.Position = p.Position
-	end
-	if p.AnchorPoint then
-		built.AnchorPoint = p.AnchorPoint
-	end
-	if p.Visible == false then
-		built.Visible = false
-	end
-	if p.ZIndex then
-		built.ZIndex = p.ZIndex
-	end
-	if p.Truncate then
-		built.TextTruncate = Enum.TextTruncate.AtEnd
-	end
-	local label = new("TextLabel", built, parent)
-	if p.Bold then
-		label:SetAttribute("Bold", true)
-		label.Font = boldFont()
-	end
-	if p.FixedSize then
-		label:SetAttribute("FixedSize", true)
-	end
-	return label
-end
-
-local function addRule(row, inset)
-	local pad = tonumber(inset) or 10
-	return new("Frame", {
-		Name = "Rule",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, pad, 1, 0),
-		Size = UDim2.new(1, -pad * 2, 0, 1),
-		BackgroundColor3 = TC.divider,
-		BackgroundTransparency = 0.45,
-		BorderSizePixel = 0,
-		Role = "Divider",
-	}, row)
-end
-
-local function makeCard(parent, opts)
-	opts = opts or {}
-	local L = CONFIG.Layout
-	local card = new("Frame", {
-		Name = opts.Name or "Card",
-		BackgroundColor3 = TC.card,
-		BackgroundTransparency = CURRENT_THEME.CardTransparency,
-		BorderSizePixel = 0,
-		Size = opts.Size or UDim2.new(1, 0, 0, 0),
-		AutomaticSize = opts.Fixed and Enum.AutomaticSize.None or Enum.AutomaticSize.Y,
-		LayoutOrder = opts.Order or 0,
-		Role = "Card",
-	}, parent)
-	new("UICorner", { CornerRadius = UDim.new(0, L.SmallCornerRadius), Role = "Small" }, card)
-	new("UIStroke", { Color = TC.textPrimary, Transparency = CURRENT_THEME.StrokeTransparency + 0.04, Thickness = 1, Role = "CardEdge", ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, card)
-	new("UIPadding", {
-		PaddingTop = UDim.new(0, 6),
-		PaddingBottom = UDim.new(0, 6),
-		PaddingLeft = UDim.new(0, 6),
-		PaddingRight = UDim.new(0, 6),
-	}, card)
-	new("UIListLayout", {
-		Padding = UDim.new(0, 0),
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		FillDirection = Enum.FillDirection.Vertical,
-	}, card)
-	if opts.Title then
-		makeLabel({
-			Name = "CardTitle",
-			Text = sanitizeString(tostring(opts.Title), 40),
-			Tier = "Secondary",
-			TextRole = "Caption",
-			Bold = true,
-			FixedSize = true,
-			TextSize = 12,
-			LayoutOrder = -10,
-			Size = UDim2.new(1, -16, 0, 24),
-			Position = UDim2.new(0, 10, 0, 0),
-		}, card)
-	end
-	return card
-end
-
-local function makeButton(parent, opts)
-	opts = opts or {}
-	local L = CONFIG.Layout
-	local variant = opts.Variant or "Default"
-	local primary = variant == "Primary"
-	local ghost = variant == "Ghost"
-	local textSize = tonumber(opts.TextSize) or L.BodySize
-	local radius = tonumber(opts.Radius) or math.max(2, L.SmallCornerRadius - 2)
-	local btn = new("TextButton", {
-		Name = opts.Name or "Button",
-		AutoButtonColor = false,
-		Selectable = true,
-		BackgroundColor3 = primary and TC.accent or TC.button,
-		BackgroundTransparency = ghost and 0.94 or 0,
-		BorderSizePixel = 0,
-		Size = opts.Size or UDim2.new(1, 0, 0, L.ButtonHeight),
-		Position = opts.Position,
-		AnchorPoint = opts.AnchorPoint,
-		Text = sanitizeString(tostring(opts.Text or "Button"), 64),
-		Font = opts.Bold and boldFont() or themeFont(),
-		TextSize = textSize,
-		TextColor3 = primary and TC.onAccent or TC.textPrimary,
-		TextXAlignment = opts.TextXAlignment or Enum.TextXAlignment.Center,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-		LayoutOrder = opts.Order or 0,
-		Role = primary and "Accent" or (ghost and "Ghost" or "Button"),
-		Tier = primary and "OnAccent" or "Primary",
-		TextRole = "Body",
-	}, parent)
-	new("UICorner", { CornerRadius = UDim.new(0, radius), Role = "Small" }, btn)
-	local state = { enabled = opts.Enabled ~= false, hover = false, pressed = false, active = opts.Active == true }
-
-	local function faceColor()
-		if primary or state.active then
-			if not state.enabled then
-				return TC.accent
-			end
-			if state.pressed then
-				return TC.accentPressed
-			end
-			if state.hover then
-				return TC.accentHover
-			end
-			return TC.accent
-		end
-		if not state.enabled then
-			return TC.button
-		end
-		if state.pressed then
-			return TC.buttonPressed
-		end
-		if state.hover then
-			return TC.buttonHover
-		end
-		return TC.button
-	end
-
-	local function faceAlpha()
-		if not state.enabled then
-			return ghost and 1 or 0.55
-		end
-		if state.active then
-			return 0
-		end
-		if ghost then
-			return state.hover and 0.88 or 0.94
-		end
-		return 0
-	end
-
-	local function refresh()
-		btn.BackgroundColor3 = faceColor()
-		btn.BackgroundTransparency = faceAlpha()
-		btn.TextColor3 = state.enabled and ((primary or state.active) and TC.onAccent or TC.textPrimary) or TC.textDisabled
-		btn.Font = opts.Bold and boldFont() or themeFont()
-		btn.TextSize = textSize
-	end
-
-	local function paint(duration, style, dir)
-		uiTween(btn, { BackgroundColor3 = faceColor(), BackgroundTransparency = faceAlpha() }, duration, style, dir)
-	end
-
-	trackConn(btn.MouseEnter:Connect(function()
-		if not state.enabled or state.hover then
-			return
-		end
-		state.hover = true
-		paint(hoverTime(true), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
-	end))
-	trackConn(btn.MouseLeave:Connect(function()
-		if not state.hover and not state.pressed then
-			return
-		end
-		state.hover = false
-		state.pressed = false
-		paint(hoverTime(false), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
-	end))
-	trackConn(btn.MouseButton1Down:Connect(function()
-		if not state.enabled or state.pressed then
-			return
-		end
-		state.pressed = true
-		paint(CONFIG.Durations.Press * 0.6, CONFIG.Easing.Press, CONFIG.Easing.PressDir)
-	end))
-	trackConn(btn.MouseButton1Up:Connect(function()
-		if not state.pressed then
-			return
-		end
-		state.pressed = false
-		paint(hoverTime(true), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
-	end))
-
-	if opts.Divider then
-		addRule(btn, opts.DividerInset)
-	end
-
-	local comp = { Instance = btn, Refresh = refresh }
-
-	function comp:SetEnabled(value)
-		state.enabled = value == true
-		btn.Active = state.enabled
-		btn.Selectable = state.enabled
-		refresh()
-	end
-
-	function comp:SetText(value)
-		btn.Text = sanitizeString(tostring(value or ""), 64)
-	end
-
-	function comp:SetActive(value)
-		state.active = value == true
-		refresh()
-	end
-
-	table.insert(REFRESH, refresh)
-	return comp
-end
-
-local KNOB_OFF_X = 2
-local KNOB_ON_X = 18
-
-local function makeToggle(parent, opts)
-	opts = opts or {}
-	local height = tonumber(opts.Height) or 42
-	local row = new("TextButton", {
-		Name = "Toggle",
-		AutoButtonColor = false,
-		Selectable = true,
-		Text = "",
-		BackgroundColor3 = TC.button,
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Size = opts.Size or UDim2.new(1, 0, 0, height),
-		LayoutOrder = opts.Order or 0,
-		Role = "Ghost",
-		ZIndex = 2,
-	}, parent)
-	new("UICorner", { CornerRadius = UDim.new(0, 6), Role = "Small" }, row)
-	makeLabel({
-		Name = "Label",
-		Text = sanitizeString(tostring(opts.Text or "Toggle"), 60),
-		Tier = "Primary",
-		TextRole = "Body",
-		Position = UDim2.new(0, 10, 0, 0),
-		Size = UDim2.new(1, -62, 1, 0),
-		Truncate = true,
-		ZIndex = 3,
-	}, row)
-	local pill = new("Frame", {
-		Name = "Switch",
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -10, 0.5, 0),
-		Size = UDim2.new(0, 34, 0, 18),
-		BackgroundColor3 = TC.track,
-		BorderSizePixel = 0,
-		ZIndex = 3,
-	}, row)
-	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, pill)
-	new("UIStroke", { Color = TC.textPrimary, Transparency = 0.88, Thickness = 1, Role = "Soft", ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, pill)
-	local knob = new("Frame", {
-		Name = "Knob",
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, KNOB_OFF_X, 0.5, 0),
-		Size = UDim2.new(0, 14, 0, 14),
-		BackgroundColor3 = TC.textSecondary,
-		BorderSizePixel = 0,
-		ZIndex = 4,
-	}, pill)
-	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, knob)
-
-	local state = { value = opts.Value == true, hover = false, enabled = opts.Enabled ~= false }
-
-	local function trackColor()
-		if not state.enabled then
-			return TC.track
-		end
-		return state.value and TC.accent or TC.track
-	end
-
-	local function knobColor()
-		if not state.enabled then
-			return TC.textDisabled
-		end
-		return state.value and Color3.new(1, 1, 1) or TC.textSecondary
-	end
-
-	local function knobPos()
-		return UDim2.new(0, state.value and KNOB_ON_X or KNOB_OFF_X, 0.5, 0)
-	end
-
-	local function paint(animated)
-		if animated == false or QUALITY.Instant then
-			pill.BackgroundColor3 = trackColor()
-			knob.BackgroundColor3 = knobColor()
-			knob.Position = knobPos()
-			return
-		end
-		uiTween(pill, { BackgroundColor3 = trackColor() }, CONFIG.Durations.Toggle, "Quad", "Out")
-		uiTween(knob, { BackgroundColor3 = knobColor() }, CONFIG.Durations.Toggle, "Quad", "Out")
-		uiTween(knob, { Position = knobPos() }, CONFIG.Durations.Toggle, "Quint", "Out")
-	end
-
-	local function refresh()
-		pill.BackgroundColor3 = trackColor()
-		knob.BackgroundColor3 = knobColor()
-		knob.Position = knobPos()
-		row.BackgroundColor3 = TC.button
-		row.BackgroundTransparency = state.hover and 0.94 or 1
-	end
-
-	local function flip()
-		if not state.enabled then
-			return
-		end
-		state.value = not state.value
-		paint(true)
-		if opts.OnChange then
-			opts.OnChange(state.value)
-		end
-	end
-
-	trackConn(row.MouseButton1Click:Connect(flip))
-	trackConn(row.MouseEnter:Connect(function()
-		state.hover = true
-		hoverTween(row, { BackgroundTransparency = 0.94 }, true)
-	end))
-	trackConn(row.MouseLeave:Connect(function()
-		state.hover = false
-		hoverTween(row, { BackgroundTransparency = 1 }, false)
-	end))
-
-	if opts.Divider ~= false then
-		addRule(row)
-	end
-
-	local comp = { Instance = row, Refresh = refresh }
-
-	function comp:Set(value)
-		state.value = value == true
-		paint(false)
-	end
-
-	function comp:Get()
-		return state.value
-	end
-
-	function comp:SetEnabled(value)
-		state.enabled = value == true
-		paint(false)
-	end
-
-	table.insert(REFRESH, refresh)
-	return comp
-end
-
-local function makeListRow(parent, opts)
-	opts = opts or {}
-	local L = CONFIG.Layout
-	local row = new("Frame", {
-		Name = "Row",
-		BackgroundColor3 = TC.button,
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Size = opts.Size or UDim2.new(1, 0, 0, 46),
-		LayoutOrder = opts.Order or 0,
-		Role = "Ghost",
-	}, parent)
-	local icon = new("Frame", {
-		Name = "Icon",
-		Position = UDim2.new(0, 10, 0.5, -11),
-		Size = UDim2.new(0, 22, 0, 22),
-		BackgroundColor3 = TC.accent,
-		BackgroundTransparency = 0.86,
-		BorderSizePixel = 0,
-		Role = "Accent",
-	}, row)
-	new("UICorner", { CornerRadius = UDim.new(0, 6), Role = "Small" }, icon)
-	makeLabel({
-		Name = "Glyph",
-		Text = string.sub(opts.Title or "A", 1, 1),
-		Tier = "Accent",
-		TextRole = "Caption",
-		Bold = true,
-		Size = UDim2.fromScale(1, 1),
-		TextXAlignment = Enum.TextXAlignment.Center,
-	}, icon)
-	makeLabel({
-		Name = "Title",
-		Text = sanitizeString(tostring(opts.Title or "Row"), 40),
-		Tier = "Primary",
-		TextRole = "Body",
-		Position = UDim2.new(0, 42, 0, 5),
-		Size = UDim2.new(1, -70, 0, L.BodySize + 6),
-		Truncate = true,
-	}, row)
-	makeLabel({
-		Name = "Subtitle",
-		Text = sanitizeString(tostring(opts.Subtitle or ""), 80),
-		Tier = "Secondary",
-		TextRole = "Caption",
-		Position = UDim2.new(0, 42, 0, L.BodySize + 8),
-		Size = UDim2.new(1, -70, 0, L.CaptionSize + 6),
-		Truncate = true,
-	}, row)
-	makeLabel({
-		Name = "Chevron",
-		Text = "›",
-		Tier = "Disabled",
-		TextRole = "Body",
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -10, 0.5, 0),
-		Size = UDim2.new(0, 14, 0, 20),
-		TextXAlignment = Enum.TextXAlignment.Right,
-	}, row)
-
-	local state = { hover = false }
-
-	local function refresh()
-		row.BackgroundColor3 = TC.button
-		row.BackgroundTransparency = state.hover and 0.9 or 1
-	end
-
-	trackConn(row.MouseEnter:Connect(function()
-		state.hover = true
-		hoverTween(row, { BackgroundTransparency = 0.9 }, true)
-	end))
-	trackConn(row.MouseLeave:Connect(function()
-		state.hover = false
-		hoverTween(row, { BackgroundTransparency = 1 }, false)
-	end))
-
-	if opts.Divider ~= false then
-		addRule(row)
-	end
-
-	table.insert(REFRESH, refresh)
-	return { Instance = row, Refresh = refresh }
-end
-
-local function makeTextInput(parent, opts)
-	opts = opts or {}
-	local L = CONFIG.Layout
-	local wrap = new("Frame", {
-		Name = "Input",
-		BackgroundColor3 = TC.base,
-		BackgroundTransparency = 0,
-		BorderSizePixel = 0,
-		Size = opts.Size or UDim2.new(1, 0, 0, L.InputHeight),
-		LayoutOrder = opts.Order or 0,
-		Role = "Input",
-	}, parent)
-	new("UICorner", { CornerRadius = UDim.new(0, math.max(4, L.SmallCornerRadius - 2)), Role = "Small" }, wrap)
-	local stroke = new("UIStroke", { Color = Color3.new(1, 1, 1), Transparency = CURRENT_THEME.StrokeTransparency, Thickness = 1, Role = "Edge" }, wrap)
-	local box = new("TextBox", {
-		Name = "Box",
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Position = UDim2.new(0, 10, 0, 0),
-		Size = UDim2.new(1, -20, 1, 0),
-		Text = opts.Text or "",
-		PlaceholderText = opts.Placeholder or "",
-		Font = themeFont(),
-		TextSize = L.BodySize,
-		TextColor3 = TC.textPrimary,
-		PlaceholderColor3 = TC.textSecondary,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		ClearTextOnFocus = false,
-		TextWrapped = false,
-		Tier = "Primary",
-		TextRole = "Body",
-	}, wrap)
-
-	local function refresh()
-		box.TextColor3 = TC.textPrimary
-		box.PlaceholderColor3 = TC.textSecondary
-		box.Font = themeFont()
-		box.TextSize = L.BodySize
-		wrap.BackgroundColor3 = TC.base
-	end
-
-	trackConn(box.Focused:Connect(function()
-		playTween(stroke, ti(mdur(hoverTime(true)), "Quad", "Out"), {
-			Color = TC.accent,
-			Transparency = 0.25,
-		})
-	end))
-	trackConn(box.FocusLost:Connect(function(enter)
-		playTween(stroke, ti(mdur(hoverTime(false)), "Quad", "Out"), {
-			Color = TC.textPrimary,
-			Transparency = CURRENT_THEME.StrokeTransparency,
-		})
-		if enter and opts.OnSubmit then
-			opts.OnSubmit(box.Text)
-		end
-	end))
-
-	local comp = { Instance = wrap, Box = box, Refresh = refresh }
-
-	function comp:GetText()
-		return box.Text
-	end
-
-	function comp:SetText(value)
-		box.Text = sanitizeString(tostring(value or ""), 400)
-	end
-
-	table.insert(REFRESH, refresh)
-	return comp
-end
-
-local function makeSlider(parent, opts)
-	opts = opts or {}
-	local minV = tonumber(opts.Min) or 0
-	local maxV = tonumber(opts.Max) or 1
-	if maxV < minV then
-		minV, maxV = maxV, minV
-	end
-	local step = tonumber(opts.Step)
-	if not step or step <= 0 then
-		step = math.max((maxV - minV) / 50, 0.0001)
-	end
-	local wrap = new("Frame", {
-		Name = "Slider",
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Size = opts.Size or UDim2.new(1, 0, 0, 54),
-		LayoutOrder = opts.Order or 0,
-	}, parent)
-	wrap:SetAttribute("NoDrag", true)
-	local header = new("Frame", {
-		Name = "Header",
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Position = UDim2.new(0, 10, 0, 6),
-		Size = UDim2.new(1, -20, 0, 18),
-	}, wrap)
-	makeLabel({
-		Name = "Label",
-		Text = sanitizeString(tostring(opts.Label or "Slider"), 48),
-		Tier = "Primary",
-		TextRole = "Body",
-		Size = UDim2.new(1, -70, 1, 0),
-		Truncate = true,
-	}, header)
-	local valueLabel = makeLabel({
-		Name = "Value",
-		Text = "",
-		Tier = "Secondary",
-		TextRole = "Caption",
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Size = UDim2.new(0, 64, 1, 0),
-		Position = UDim2.new(1, -64, 0, 0),
-	}, header)
-	local trackFrame = new("Frame", {
-		Name = "Track",
-		Position = UDim2.new(0, 10, 0, 36),
-		Size = UDim2.new(1, -20, 0, 4),
-		BackgroundColor3 = TC.track,
-		BorderSizePixel = 0,
-		Role = "Track",
-	}, wrap)
-	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, trackFrame)
-	local fill = new("Frame", {
-		Name = "Fill",
-		Size = UDim2.new(0, 0, 1, 0),
-		BackgroundColor3 = TC.fill,
-		BorderSizePixel = 0,
-		Role = "Fill",
-	}, trackFrame)
-	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, fill)
-	local hit = new("Frame", {
-		Name = "Hit",
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 0, 0.5, 0),
-		Size = UDim2.new(1, 0, 0, 24),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-	}, trackFrame)
-	hit:SetAttribute("NoDrag", true)
-	local knob = new("Frame", {
-		Name = "Knob",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(0, 0, 0.5, 0),
-		Size = UDim2.new(0, 12, 0, 12),
-		BackgroundColor3 = TC.textPrimary,
-		BorderSizePixel = 0,
-		Role = "SliderKnob",
-	}, trackFrame)
-	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, knob)
-
-	local state = {
-		value = clampNum(tonumber(opts.Value) or minV, minV, maxV),
-		dragging = false,
-		offset = 0,
-	}
-
-	local function snap(v)
-		local steps = math.floor((v - minV) / step + 0.5)
-		return clampNum(minV + steps * step, minV, maxV)
-	end
-
-	local function alphaOf(v)
-		if maxV - minV <= 0 then
-			return 0
-		end
-		return (v - minV) / (maxV - minV)
-	end
-
-	local function decimals()
-		if step >= 1 then
-			return 0
-		end
-		if step >= 0.1 then
-			return 1
-		end
-		return 2
-	end
-
-	local function formatValue(v)
-		if type(opts.Format) == "function" then
-			local ok, text = pcall(opts.Format, v)
-			if ok and text ~= nil then
-				return sanitizeString(tostring(text), 16)
-			end
-		end
-		return string.format("%." .. decimals() .. "f", v)
-	end
-
-	local function place(animated)
-		local a = alphaOf(state.value)
-		if animated then
-			uiTween(fill, { Size = UDim2.new(a, 0, 1, 0) }, hoverTime(false), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
-			uiTween(knob, { Position = UDim2.new(a, 0, 0.5, 0) }, hoverTime(false), CONFIG.Easing.Hover, CONFIG.Easing.HoverDir)
-		else
-			fill.Size = UDim2.new(a, 0, 1, 0)
-			knob.Position = UDim2.new(a, 0, 0.5, 0)
-		end
-		valueLabel.Text = formatValue(state.value)
-	end
-
-	local function commit(value, animated, raw)
-		local clamped = clampNum(value, minV, maxV)
-		local nextValue = raw and clamped or snap(clamped)
-		local changed = nextValue ~= state.value
-		state.value = nextValue
-		place(animated)
-		if changed and opts.OnChange then
-			opts.OnChange(state.value)
-		end
-	end
-
-	local function valueFromInput(input)
-		local width = trackFrame.AbsoluteSize.X
-		if width <= 0 then
-			return state.value
-		end
-		local a = clampNum((input.Position.X - trackFrame.AbsolutePosition.X) / width, 0, 1)
-		return minV + a * (maxV - minV)
-	end
-
-	local function pointInRect(obj, point, padY)
-		local ap = obj.AbsolutePosition
-		local as = obj.AbsoluteSize
-		local pad = padY or 0
-		return point.X >= ap.X and point.X <= ap.X + as.X and point.Y >= ap.Y - pad and point.Y <= ap.Y + as.Y + pad
-	end
-
-	local function onScreen()
-		local o = wrap
-		while o and o ~= Gui do
-			if o:IsA("GuiObject") and o.Visible ~= true then
-				return false
-			end
-			o = o.Parent
-		end
-		return true
-	end
-
-	local function beginDrag(input)
-		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
-			return
-		end
-		local pos = input.Position
-		if not pos or (Customize and Customize.Visible) or not onScreen() then
-			return
-		end
-		local point = Vector2.new(pos.X, pos.Y)
-		if not pointInRect(hit, point, 4) then
-			return
-		end
-		if CancelWindowDrag then
-			CancelWindowDrag()
-		end
-		local fromKnob = pointInRect(knob, point, 2)
-		state.offset = fromKnob and (state.value - valueFromInput(input)) or 0
-		state.dragging = true
-		if not fromKnob then
-			commit(valueFromInput(input), false, true)
-		end
-	end
-
-	trackConn(UserInputService.InputBegan:Connect(beginDrag))
-	trackConn(UserInputService.InputChanged:Connect(function(input)
-		if not state.dragging then
-			return
-		end
-		if input.UserInputType == Enum.UserInputType.MouseMovement then
-			if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-				state.dragging = false
-				state.offset = 0
-				commit(state.value, true)
-				return
-			end
-		elseif input.UserInputType ~= Enum.UserInputType.Touch then
-			return
-		end
-		commit(valueFromInput(input) + state.offset, false, true)
-	end))
-	trackConn(UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
-			return
-		end
-		if not state.dragging then
-			return
-		end
-		state.dragging = false
-		state.offset = 0
-		commit(state.value, true)
-	end))
-	trackConn(hit.MouseEnter:Connect(function()
-		hoverTween(knob, { Size = UDim2.new(0, 15, 0, 15) }, true)
-	end))
-	trackConn(hit.MouseLeave:Connect(function()
-		if state.dragging then
-			return
-		end
-		hoverTween(knob, { Size = UDim2.new(0, 12, 0, 12) }, false)
-	end))
-
-	local function refresh()
-		trackFrame.BackgroundColor3 = TC.track
-		fill.BackgroundColor3 = TC.accent
-		knob.BackgroundColor3 = TC.textPrimary
-		valueLabel.TextColor3 = TC.textSecondary
-	end
-
-	local comp = { Instance = wrap, Refresh = refresh }
-
-	function comp:Set(value)
-		commit(tonumber(value) or state.value, false)
-	end
-
-	function comp:Get()
-		return state.value
-	end
-
-	table.insert(REFRESH, refresh)
-	place(false)
-	if opts.Divider ~= false then
-		addRule(wrap)
-	end
-	return comp
-end
-
-local toast
-local playGallery
-local applyConfigNow
-local openCustomize
-local closeCustomize
-local toggleDebug
-local captureShot
-local showMain
-local hideMain
-local setLoading
-
-local function clearStage()
-	if not Stage then
-		return
-	end
-	cancelList(STAGE_TWEENS)
-	for i = #STAGE_CONNS, 1, -1 do
-		local c = STAGE_CONNS[i]
-		pcall(function()
-			c:Disconnect()
-		end)
-		table.remove(STAGE_CONNS, i)
-	end
-	for _, child in ipairs(Stage:GetChildren()) do
-		child:Destroy()
-	end
-	ThemeCache.list = nil
-end
-
-local function later(seconds, fn)
-	local ref = TOKEN
-	task.delay(seconds, function()
-		if DESTROYED or TOKEN ~= ref then
-			return
-		end
-		fn()
-	end)
-end
-
-local function stageGroup(width, height)
-	return new("CanvasGroup", {
-		Name = "Loader",
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.new(0, width, 0, height),
-		GroupTransparency = 1,
-		ZIndex = 4,
-	}, Stage)
-end
-
-local function ambientPetals(parent, opts)
-	opts = opts or {}
-	local cfg = CONFIG.Ambient or {}
-	if not parent or cfg.Petals == false then
-		return
-	end
-	local vp = viewportSize()
-	local spanW = tonumber(opts.Width) or vp.X
-	local spanH = tonumber(opts.Height) or (vp.Y + 90)
-	local count = math.floor(clampNum(tonumber(opts.Count) or tonumber(cfg.Count) or 8, 0, 24))
-	if count <= 0 or spanW <= 0 or spanH <= 0 then
-		return
-	end
-	local fade = tonumber(opts.Transparency) or 0.35
-	local depth = tonumber(opts.ZIndex) or 1
-	local layer = new("Frame", {
-		Name = opts.Name or "Petals",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ZIndex = depth,
-	}, parent)
-	local tint = hexToColor(CONFIG.Loading.PetalColor or CONFIG.Loading.LogoColor)
-	for i = 1, count do
-		local width = 6 + math.random() * 5
-		local height = width * 1.4
-		local lane = (i - 0.5) / count * spanW
-		local x = lane + (math.random() * 80 - 40)
-		local drift = (math.random() * 2 - 1) * 60
-		local speed = clampNum(tonumber(opts.Speed) or tonumber(cfg.Speed) or 62, 20, 200) + math.random() * 36
-		local fall = spanH / speed
-		local delayTime = math.random() * fall
-		local petal = new("Frame", {
-			Name = "Petal",
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.new(0, x, 0, -50),
-			Size = UDim2.new(0, width, 0, height),
-			Rotation = math.random() * 360,
-			BackgroundColor3 = tint,
-			BackgroundTransparency = fade + math.random() * 0.25,
-			BorderSizePixel = 0,
-			ZIndex = depth,
-		}, layer)
-		new("UICorner", { CornerRadius = UDim.new(0.5, 0), Role = "Dot" }, petal)
-		playTween(petal, ti(fall, "Linear", "Out", -1, false, delayTime), {
-			Position = UDim2.new(0, x + drift, 0, spanH - 50),
-		}, PETAL_TWEENS)
-		playTween(petal, ti(fall * 1.6, "Linear", "Out", -1, false, delayTime), {
-			Rotation = petal.Rotation + 220,
-		}, PETAL_TWEENS)
-	end
-end
-
-local function setPetalsPaused(paused)
-	for i = 1, #PETAL_TWEENS do
-		local tw = PETAL_TWEENS[i]
-		pcall(function()
-			if paused == true then
-				tw:Pause()
-			elseif tw.PlaybackState ~= Enum.PlaybackState.Playing then
-				tw:Play()
-			end
-		end)
-	end
-end
-
-local function loaderSplash()
-	local titleY = 6
-	local barY = 34
-	local groupH = barY + 10
-	local w = fitWidth(240)
-	local g = stageGroup(w, groupH)
-	g.Position = UDim2.new(0.5, 0, 0.5, 10)
-	playTween(g, ti(dur(CONFIG.Durations.Splash) * 0.4, "Quint", "Out"), { Position = UDim2.fromScale(0.5, 0.5) })
-
-	makeLabel({
-		Name = "Title",
-		Text = sanitizeString(tostring(CONFIG.Brand.Name or "Blossom"), 24),
-		Tier = "Primary",
-		TextRole = "Title",
-		Color = hexToColor(CONFIG.Loading.TitleColor or "#FCEFF4"),
-		Bold = true,
-		FixedSize = true,
-		TextSize = 15,
-		Position = UDim2.new(0, 0, 0, titleY),
-		Size = UDim2.new(1, 0, 0, 20),
-		TextXAlignment = Enum.TextXAlignment.Center,
-		ZIndex = 3,
-	}, g)
-	local bar = new("Frame", {
-		Name = "Progress",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, barY),
-		Size = UDim2.new(0, 120, 0, 2),
-		BackgroundColor3 = TC.track,
-		BorderSizePixel = 0,
-		Role = "Track",
-		ZIndex = 3,
-	}, g)
-	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, bar)
-	local fill = new("Frame", {
-		Name = "Fill",
-		Size = UDim2.new(0, 0, 1, 0),
-		BackgroundColor3 = TC.accent,
-		BorderSizePixel = 0,
-		Role = "Fill",
-		ZIndex = 4,
-	}, bar)
-	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, fill)
-	playTween(fill, ti(dur(CONFIG.Durations.Splash), "Quint", "Out"), { Size = UDim2.new(1, 0, 1, 0) }, STAGE_TWEENS)
-
-	local inTime = dur(CONFIG.Durations.Splash) * 0.4
-	local outTime = dur(CONFIG.Durations.Splash) * 0.35
-	local total = inTime + dur(CONFIG.Durations.SplashHold) + outTime
-	playTween(g, ti(inTime, CONFIG.Easing.Fade, CONFIG.Easing.FadeDir), { GroupTransparency = 0 })
-	later(inTime + dur(CONFIG.Durations.SplashHold), function()
-		playTween(g, ti(outTime, CONFIG.Easing.Fade, "In"), { GroupTransparency = 1 })
-	end)
-	return total
-end
-
-local function stopLogoSpin()
-	if LogoSpinTween then
-		pcall(function()
-			LogoSpinTween:Cancel()
-		end)
-		LogoSpinTween = nil
-	end
-	if LogoFloatTween then
-		pcall(function()
-			LogoFloatTween:Cancel()
-		end)
-		LogoFloatTween = nil
-	end
-	if LoadingRotor then
-		LoadingRotor.Rotation = 0
-		LoadingRotor.Size = UDim2.fromScale(1, 1)
-	end
-end
-
-local function startLogoSpin()
-	stopLogoSpin()
-	if not LoadingRotor then
-		return
-	end
-	if CONFIG.Loading.LogoMode == "Image" and CONFIG.Loading.LogoImageId ~= "" then
-		local pulse = math.max(0.3, tonumber(CONFIG.Loading.LogoPulse) or 1.1)
-		local float = math.max(0.3, tonumber(CONFIG.Loading.LogoFloat) or 1.8)
-		LogoSpinTween = playTween(LoadingRotor, ti(pulse, "Sine", "InOut", -1, true), { Size = UDim2.fromScale(1.07, 1.07) })
-		if LoadingLogo then
-			local baseY = tonumber(CONFIG.Loading.LogoOffsetY) or -104
-			LogoFloatTween = playTween(LoadingLogo, ti(float, "Sine", "InOut", -1, true), { Position = UDim2.new(0.5, 0, 0.5, baseY - 7) })
-		end
-		return
-	end
-	LoadingRotor.Rotation = 0
-	local spin = math.max(0.2, tonumber(CONFIG.Loading.LogoSpin) or 1.6)
-	LogoSpinTween = playTween(LoadingRotor, ti(spin, "Linear", "Out", -1), { Rotation = 360 })
-end
-
-setLoading = function(active)
-	LoadingActive = active == true
-	manageBlur()
-	if LoadingLogo then
-		LoadingLogo.Visible = LoadingActive
-	end
-	if LoadingActive then
-		startLogoSpin()
-	else
-		stopLogoSpin()
-	end
-end
-
-showMain = function(animated)
-	if not Main then
-		return
-	end
-	MainVisible = true
-	Main.Visible = true
-	setLoading(false)
-	setBackdrop("main")
-	if animated and not QUALITY.Instant then
-		MainColumn.Position = UDim2.new(0.5, 0, 0.5, 16)
-		uiTween(MainColumn, { Position = UDim2.fromScale(0.5, 0.5) }, CONFIG.Durations.Slide, "Quint", "Out")
-		if MainScale then
-			if QUALITY.ScalePop then
-				MainScale.Scale = 0.97
-				uiTween(MainScale, { Scale = 1 }, CONFIG.Durations.Slide, "Quint", "Out")
-			else
-				MainScale.Scale = 1
-			end
-		end
-	else
-		MainColumn.Position = UDim2.fromScale(0.5, 0.5)
-		if MainScale then
-			MainScale.Scale = 1
-		end
-	end
-end
-
-hideMain = function(instant)
-	if not Main then
-		return
-	end
-	MainVisible = false
-	if instant or QUALITY.Instant then
-		Main.Visible = false
-		if MainScale then
-			MainScale.Scale = 1
-		end
-		MainColumn.Position = UDim2.fromScale(0.5, 0.5)
-		return
-	end
-	local outTime = mdur(CONFIG.Durations.Fade) * 0.7
-	local p = MainColumn.Position
-	uiTween(MainColumn, { Position = UDim2.new(p.X.Scale, p.X.Offset, p.Y.Scale, p.Y.Offset + 10) }, outTime, "Quad", "In")
-	task.delay(outTime + 0.05, function()
-		if DESTROYED or MainVisible or not Main then
-			return
-		end
-		Main.Visible = false
-		if MainScale then
-			MainScale.Scale = 1
-		end
-		MainColumn.Position = UDim2.fromScale(0.5, 0.5)
-	end)
-end
-local JsonBox
-local StatusLabel
-local FlashFrame
-local SpeedButtons = {}
-local SkinButtons = {}
-local rebuildThemeChips
-local StatusIsError = false
-local CustomTab = "Theme"
-
-local function setButtonActive(comp, on)
-	if comp and comp.SetActive then
-		comp:SetActive(on == true)
-	end
-end
-
-local function statusText(message, isError)
-	if not StatusLabel then
-		return
-	end
-	StatusIsError = isError == true
-	StatusLabel.Text = sanitizeString(tostring(message or ""), 400)
-	StatusLabel.TextColor3 = isError and Color3.fromRGB(255, 132, 132) or TC.textSecondary
-end
-
-local function refreshStatus()
-	if StatusLabel and StatusIsError then
-		StatusLabel.TextColor3 = Color3.fromRGB(255, 132, 132)
-	end
-end
-
-toast = function(text, isError)
-	if not ToastGroup or not ToastLabel then
-		return
-	end
-	ToastLabel.Text = sanitizeString(tostring(text or ""), 140)
-	ToastLabel.TextColor3 = isError and Color3.fromRGB(255, 140, 140) or TC.textPrimary
-	if ToastStripe then
-		ToastStripe.BackgroundColor3 = isError and Color3.fromRGB(255, 92, 92) or TC.accent
-	end
-	ToastSeq = ToastSeq + 1
-	local ref = ToastSeq
-	local onScreen = ToastGroup.Visible and ToastGroup.GroupTransparency < 0.5
-	ToastGroup.Visible = true
-	if onScreen and not QUALITY.Instant then
-		ToastGroup.Position = UDim2.new(1, -16, 0, 16)
-		playTween(ToastGroup, ti(mdur(0.12), "Quad", "Out"), { GroupTransparency = 0 })
-		playTween(ToastGroup, ti(mdur(0.16), "Quint", "Out"), { Position = UDim2.new(1, -23, 0, 16) })
-		task.delay(mdur(0.2), function()
-			if DESTROYED or ToastSeq ~= ref or not ToastGroup then
-				return
-			end
-			playTween(ToastGroup, ti(mdur(0.24), "Quint", "Out"), { Position = UDim2.new(1, -16, 0, 16) })
-		end)
-	else
-		ToastGroup.GroupTransparency = 1
-		ToastGroup.Position = UDim2.new(1, 56, 0, 16)
-		playTween(ToastGroup, ti(dur(CONFIG.Durations.Slide), CONFIG.Easing.Slide, CONFIG.Easing.SlideDir), { Position = UDim2.new(1, -16, 0, 16), GroupTransparency = 0 })
-	end
-	task.delay(math.max(2, dur(CONFIG.Durations.Fade) * 4), function()
-		if DESTROYED or ToastSeq ~= ref or not ToastGroup then
-			return
-		end
-		playTween(ToastGroup, ti(dur(CONFIG.Durations.Fade), CONFIG.Easing.Slide, "In"), { Position = UDim2.new(1, 56, 0, 16), GroupTransparency = 1 })
-		task.delay(dur(CONFIG.Durations.Fade) + 0.08, function()
-			if DESTROYED or ToastSeq ~= ref or not ToastGroup then
-				return
-			end
-			ToastGroup.Visible = false
-		end)
-	end)
-end
-
-captureShot = function()
-	local ok, err = pcall(function()
-		CaptureService:CaptureScreenshot()
-	end)
-	if ok then
-		toast("Screenshot saved")
-		if FlashFrame then
-			FlashFrame.BackgroundTransparency = 1
-			FlashFrame.Visible = true
-			playTween(FlashFrame, ti(dur(CONFIG.Durations.Press), "Quad", "Out"), { BackgroundTransparency = 0.55 })
-			later(dur(CONFIG.Durations.Press) + 0.05, function()
-				playTween(FlashFrame, ti(dur(CONFIG.Durations.Fade), "Quad", "In"), { BackgroundTransparency = 1 })
-			end)
-		end
-	else
-		toast("Capture failed: " .. sanitizeString(tostring(err), 60), true)
-	end
-end
-
-local function updateScale()
-	updateRootScale()
-	if not MainColumn then
-		return
-	end
-	local vp = viewportSize()
-	local scaleNow = RootScale and RootScale.Scale or 1
-	local availW = vp.X / math.max(0.1, scaleNow) - 40
-	local availH = vp.Y / math.max(0.1, scaleNow) - 72
-	local w = math.floor(clampNum(math.min(CONFIG.Layout.MaxWidth, availW), 300, CONFIG.Layout.MaxWidth))
-	local h = math.floor(clampNum(math.min(430, availH), 280, 430))
-	MainColumn.Size = UDim2.new(0, w, 0, h)
-	local sideW = math.floor(clampNum(w * 0.3, 138, 168))
-	if SidebarPanel then
-		SidebarPanel.Size = UDim2.new(0, math.max(120, sideW - 16), 1, -54)
-	end
-	if ContentPanel then
-		ContentPanel.Position = UDim2.new(0, sideW, 0, 38)
-		ContentPanel.Size = UDim2.new(1, -sideW, 1, -38)
-	end
-end
-
-local function makeSection(parent, title, order)
-	return makeCard(parent, {
-		Name = "Section",
-		Order = order or 0,
-		Title = title,
-	})
-end
-
-local function makeSettingRow(parent, opts)
-	opts = opts or {}
-	local width = tonumber(opts.ControlWidth) or 160
-	local row = new("Frame", {
-		Name = "Setting",
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Size = opts.Size or UDim2.new(1, 0, 0, tonumber(opts.Height) or 42),
-		LayoutOrder = opts.Order or 0,
-	}, parent)
-	makeLabel({
-		Name = "Label",
-		Text = sanitizeString(tostring(opts.Label or ""), 48),
-		Tier = "Primary",
-		TextRole = "Body",
-		Position = UDim2.new(0, 10, 0, 0),
-		Size = UDim2.new(1, -width - 24, 1, 0),
-		Truncate = true,
-	}, row)
-	if type(opts.Build) == "function" then
-		opts.Build(row)
-	end
-	if opts.Divider ~= false then
-		addRule(row)
-	end
-	return row
-end
-
-local function buildFeatureControl(parent, item, order, api)
-	local base = order * 10
-	if item.Type == "Button" then
-		local button = makeButton(parent, {
-			Text = sanitizeString(tostring(item.Text or "Button"), 40),
-			Variant = item.Variant == "Primary" and "Primary" or nil,
-			Order = base,
-			Size = UDim2.new(1, 0, 0, 38),
-			Divider = true,
-		})
-		if type(item.OnClick) == "function" then
-			trackConn(button.Instance.MouseButton1Click:Connect(function()
-				item.OnClick(api)
-			end))
-		end
-		return
-	end
-	if item.Type == "Input" then
-		makeSettingRow(parent, {
-			Label = sanitizeString(tostring(item.Label or "Input"), 40),
-			Order = base,
-			ControlWidth = 170,
-			Build = function(row)
-				local input = makeTextInput(row, {
-					Text = item.Value ~= nil and sanitizeString(tostring(item.Value), 400) or "",
-					Placeholder = sanitizeString(tostring(item.Placeholder or "Type here and press Enter"), 80),
-					Size = UDim2.new(0, 170, 0, CONFIG.Layout.InputHeight),
-					OnSubmit = function(text)
-						if type(item.OnSubmit) == "function" then
-							item.OnSubmit(text, api)
-						end
-					end,
-				})
-				input.Instance.AnchorPoint = Vector2.new(1, 0.5)
-				input.Instance.Position = UDim2.new(1, -10, 0.5, 0)
-			end,
-		})
-		return
-	end
-	if item.Type == "Toggle" then
-		makeToggle(parent, {
-			Text = sanitizeString(tostring(item.Label or item.Text or "Toggle"), 40),
-			Value = item.Value == true,
-			Order = base,
-			OnChange = function(value)
-				if type(item.OnChange) == "function" then
-					item.OnChange(value, api)
-				end
-			end,
-		})
-		return
-	end
-	if item.Type == "Slider" then
-		makeSlider(parent, {
-			Label = sanitizeString(tostring(item.Label or "Slider"), 40),
-			Min = item.Min,
-			Max = item.Max,
-			Step = item.Step,
-			Value = item.Value,
-			Format = item.Format,
-			Order = base,
-			OnChange = function(value)
-				if type(item.OnChange) == "function" then
-					item.OnChange(value, api)
-				end
-			end,
-		})
-	end
-end
-
-local function buildFeatures(addPage)
-	local valid = {}
-	for _, category in ipairs(FEATURES) do
-		if type(category) == "table" and type(category.Controls) == "table" and #category.Controls > 0 then
-			table.insert(valid, category)
-		end
-	end
-	if #valid == 0 then
-		return
-	end
-	local api = {
-		Config = CONFIG,
-		State = GalleryState,
-		Toast = function(message)
-			toast(message)
-		end,
-		OpenCustomize = function()
-			openCustomize()
-		end,
-		CloseCustomize = function()
-			closeCustomize()
-		end,
-		PlayLoader = function()
-			playGallery()
-		end,
-		ApplyConfig = function()
-			applyConfigNow()
-		end,
-		ToggleDebug = function()
-			toggleDebug()
-		end,
-		Capture = function()
-			captureShot()
-		end,
-		CycleSkin = function()
-			local names = skinNames()
-			if #names == 0 then
-				return
-			end
-			local current = PLAYER and PLAYER:GetAttribute("BlossomSkin") or names[1]
-			local index = table.find(names, current) or 0
-			local nextName = names[(index % #names) + 1]
-			applyTheme(SKINS[nextName], true)
-			if PLAYER then
-				PLAYER:SetAttribute("BlossomSkin", nextName)
-			end
-			saveCustomSkins()
-			for otherName, otherBtn in pairs(SkinButtons) do
-				setButtonActive(otherBtn, otherName == nextName)
-			end
-			toast("Skin: " .. nextName)
-		end,
-	}
-	for index, category in ipairs(valid) do
-		if index > 1 then
-			task.wait()
-			if DESTROYED then
-				return
-			end
-		end
-		local name = sanitizeString(tostring(category.Name or "Category " .. index), 24)
-		if name == "" then
-			name = "Category " .. index
-		end
-		local subtitle = sanitizeString(tostring(category.Description or ""), 120)
-		local scroll = addPage(name, subtitle)
-		local group = makeCard(scroll, { Name = "Group", Order = 2 })
-		for order, item in ipairs(category.Controls) do
-			if type(item) == "table" then
-				buildFeatureControl(group, item, order, api)
-			end
-		end
-	end
-end
-
-local CATEGORY_ICONS = {
-	Home = "home",
-	Loader = "ring",
-	Loaders = "ring",
-	Interface = "sliders",
-	Animation = "diamond",
-	Capture = "camera",
-	Settings = "cog",
-}
-
-local function makeCategoryIcon(kind, parent)
-	local box = new("Frame", {
-		Name = "Icon",
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 12, 0.5, 0),
-		Size = UDim2.new(0, 16, 0, 16),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ZIndex = 3,
-	}, parent)
-	local function shape(cx, cy, w, h, rot, radius, filled)
-		local f = new("Frame", {
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.new(0, cx, 0, cy),
-			Size = UDim2.new(0, w, 0, h),
-			BackgroundColor3 = TC.textDisabled,
-			BackgroundTransparency = filled and 0 or 1,
-			BorderSizePixel = 0,
-			Rotation = rot or 0,
-			ZIndex = 3,
-		}, box)
-		new("UICorner", { CornerRadius = UDim.new(0, radius or 1) }, f)
-		if not filled then
-			new("UIStroke", { Color = TC.textDisabled, Transparency = 0, Thickness = 1.6 }, f)
-		end
-		return f
-	end
-	if kind == "list" then
-		shape(8, 4, 13, 2, 0, 1, true)
-		shape(8, 8, 13, 2, 0, 1, true)
-		shape(5.5, 12, 8, 2, 0, 1, true)
-	elseif kind == "sliders" then
-		shape(8, 5, 13, 2, 0, 1, true)
-		shape(8, 11, 13, 2, 0, 1, true)
-		shape(5, 5, 5, 5, 0, 2.5, true)
-		shape(11, 11, 5, 5, 0, 2.5, true)
-	elseif kind == "diamond" then
-		shape(8, 8, 8, 8, 45, 2, true)
-	elseif kind == "ring" then
-		shape(8, 8, 12, 12, 0, 6, false)
-		shape(8, 4.2, 4, 4, 0, 2, true)
-	elseif kind == "cog" then
-		shape(8, 8, 11, 11, 0, 5.5, false)
-		shape(8, 1.7, 2, 3, 0, 1, true)
-		shape(8, 14.3, 2, 3, 0, 1, true)
-		shape(1.7, 8, 3, 2, 0, 1, true)
-		shape(14.3, 8, 3, 2, 0, 1, true)
-	elseif kind == "camera" then
-		shape(8, 9.5, 14, 9, 0, 3, false)
-		shape(8, 3.6, 5, 3, 0, 1.5, true)
-		shape(8, 9.5, 4.5, 4.5, 0, 2.25, false)
-	elseif kind == "home" then
-		shape(8, 10.6, 10, 7.5, 0, 2, false)
-		shape(5.2, 4.9, 6.6, 2.2, -40, 1.1, true)
-		shape(10.8, 4.9, 6.6, 2.2, 40, 1.1, true)
-	else
-		shape(4.5, 4.5, 6, 6, 0, 2, true)
-		shape(11.5, 4.5, 6, 6, 0, 2, true)
-		shape(4.5, 11.5, 6, 6, 0, 2, true)
-		shape(11.5, 11.5, 6, 6, 0, 2, true)
-	end
-	return box
-end
-
-local function tintIcon(box, color, animated)
-	if not box then
-		return
-	end
-	local info = ti(mdur(CONFIG.Durations.Hover), "Quad", "Out")
-	for _, child in ipairs(box:GetChildren()) do
-		if child:IsA("Frame") then
-			local stroke = child:FindFirstChildOfClass("UIStroke")
-			if not stroke then
-				if animated and not QUALITY.Instant then
-					playTween(child, info, { BackgroundColor3 = color })
-				else
-					child.BackgroundColor3 = color
-				end
-			else
-				if animated and not QUALITY.Instant then
-					playTween(stroke, info, { Color = color })
-				else
-					stroke.Color = color
-				end
-			end
-		end
-	end
-end
-
-local function buildMain()
-	Main = new("Frame", {
-		Name = "Main",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Visible = false,
-		ZIndex = 3,
-	}, Root)
-	local L = CONFIG.Layout
-	local topH = 38
-	local headerH = 78
-	trackConn(Main:GetPropertyChangedSignal("Visible"):Connect(function()
-		setPetalsPaused(Main.Visible ~= true)
-	end))
-	ambientPetals(Main)
-	MainColumn = new("Frame", {
-		Name = "Window",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.new(0, L.MaxWidth, 0, 420),
-		BackgroundColor3 = TC.base,
-		BackgroundTransparency = 0,
-		BorderSizePixel = 0,
-		ClipsDescendants = true,
-		Role = "Panel",
-		ZIndex = 3,
-	}, Main)
-	MainScale = new("UIScale", { Scale = 1 }, MainColumn)
-	new("UICorner", { CornerRadius = UDim.new(0, L.CornerRadius), Role = "Corner" }, MainColumn)
-	new("UIStroke", { Color = TC.textPrimary, Transparency = CURRENT_THEME.StrokeTransparency, Thickness = 1, Role = "Edge", ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, MainColumn)
-	ambientPetals(MainColumn, {
-		Name = "PetalOverlay",
-		ZIndex = 60,
-		Count = 6,
-		Width = L.MaxWidth,
-		Height = 510,
-		Transparency = 0.55,
-	})
-	setPetalsPaused(Main.Visible ~= true)
-
-	local titlebar = new("Frame", {
-		Name = "Titlebar",
-		Size = UDim2.new(1, 0, 0, topH),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ZIndex = 6,
-	}, MainColumn)
-	new("Frame", {
-		Name = "BarSep",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, 0, 1, 0),
-		Size = UDim2.new(1, 0, 0, 1),
-		BackgroundColor3 = TC.divider,
-		BackgroundTransparency = 0.55,
-		BorderSizePixel = 0,
-		Role = "Divider",
-		ZIndex = 6,
-	}, titlebar)
-	local mark = new("Frame", {
-		Name = "Mark",
-		Position = UDim2.new(0, 16, 0.5, -3),
-		Size = UDim2.new(0, 6, 0, 6),
-		BackgroundColor3 = TC.accent,
-		BorderSizePixel = 0,
-		Role = "Accent",
-		ZIndex = 7,
-	}, titlebar)
-	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, mark)
-	makeLabel({
-		Name = "Wordmark",
-		Text = sanitizeString(tostring(CONFIG.Brand.Name or "Blossom"), 24),
-		Tier = "Primary",
-		TextRole = "Caption",
-		Bold = true,
-		FixedSize = true,
-		TextSize = 13,
-		Position = UDim2.new(0, 28, 0, 0),
-		Size = UDim2.new(0, 160, 1, 0),
-		ZIndex = 7,
-	}, titlebar)
-	makeLabel({
-		Name = "Version",
-		Text = "v2.0",
-		Tier = "Disabled",
-		TextRole = "Caption",
-		FixedSize = true,
-		TextSize = 11,
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -42, 0.5, 0),
-		Size = UDim2.new(0, 40, 1, 0),
-		TextXAlignment = Enum.TextXAlignment.Right,
-		ZIndex = 7,
-	}, titlebar)
-	local closeBtn = makeButton(titlebar, {
-		Text = "X",
-		Variant = "Ghost",
-		Size = UDim2.new(0, 24, 0, 24),
-		TextSize = 12,
-		Bold = true,
-		Radius = 6,
-	})
-	closeBtn.Instance.AnchorPoint = Vector2.new(1, 0.5)
-	closeBtn.Instance.Position = UDim2.new(1, -10, 0.5, 0)
-	closeBtn.Instance.ZIndex = 7
-	trackConn(closeBtn.Instance.MouseButton1Click:Connect(function()
-		hideMain(false)
-	end))
-
-	local drag = { active = false, start = nil, center = nil, target = nil, current = nil, conn = nil }
-	local function overClose(pos)
-		local btn = closeBtn.Instance
-		local ap = btn.AbsolutePosition
-		local as = btn.AbsoluteSize
-		return pos.X >= ap.X and pos.X <= ap.X + as.X and pos.Y >= ap.Y and pos.Y <= ap.Y + as.Y
-	end
-	local function isInteractive(obj)
-		while obj and obj ~= MainColumn do
-			if obj:IsA("TextButton") or obj:IsA("TextBox") or obj:IsA("ImageButton") or obj:IsA("ScrollingFrame") then
-				return true
-			end
-			if obj:GetAttribute("NoDrag") == true then
-				return true
-			end
-			obj = obj.Parent
-		end
-		return false
-	end
-	local function overWindow(pos)
-		local ap = MainColumn.AbsolutePosition
-		local as = MainColumn.AbsoluteSize
-		if as.X <= 0 or as.Y <= 0 then
-			return false
-		end
-		return pos.X >= ap.X and pos.X <= ap.X + as.X and pos.Y >= ap.Y and pos.Y <= ap.Y + as.Y
-	end
-	local function blockedAt(pos)
-		local ok, list = pcall(function()
-			return UserInputService:GetGuiObjectsAtPosition(pos.X, pos.Y)
-		end)
-		if not ok or type(list) ~= "table" then
-			return false
-		end
-		for _, obj in ipairs(list) do
-			if obj ~= MainColumn and obj ~= Main and obj ~= Root and obj ~= Stage and isInteractive(obj) then
-				return true
-			end
-		end
-		return false
-	end
-	local function clampCenter(c)
-		local vp = viewportSize()
-		local halfW = MainColumn.AbsoluteSize.X * 0.5
-		local halfH = MainColumn.AbsoluteSize.Y * 0.5
-		local minX = halfW + 8
-		local minY = halfH + 8
-		return Vector2.new(
-			clampNum(c.X, minX, math.max(minX, vp.X - halfW - 8)),
-			clampNum(c.Y, minY, math.max(minY, vp.Y - halfH - 8))
-		)
-	end
-
-	local function applyDrag(center)
-		local rs = math.max(0.1, RootScale and RootScale.Scale or 1)
-		MainColumn.Position = UDim2.new(0, center.X / rs, 0, center.Y / rs)
-	end
-
-	local function stopDragLoop()
-		if drag.conn then
-			pcall(function()
-				drag.conn:Disconnect()
-			end)
-			drag.conn = nil
-		end
-	end
-
-	local function startDragLoop()
-		if drag.conn then
-			return
-		end
-		drag.conn = RunService.RenderStepped:Connect(function(dt)
-			if not drag.target or not drag.current then
-				return
-			end
-			local remaining = drag.target - drag.current
-			if remaining.Magnitude < 0.35 then
-				drag.current = drag.target
-				applyDrag(drag.target)
-				if not drag.active then
-					stopDragLoop()
-				end
-				return
-			end
-			drag.current = drag.current:Lerp(drag.target, clampNum(dt * 38, 0, 1))
-			applyDrag(drag.current)
-		end)
-		trackConn(drag.conn)
-	end
-
-	local function finishDrag()
-		if not drag.active then
-			return
-		end
-		drag.active = false
-		if drag.target then
-			drag.target = clampCenter(drag.target)
-		end
-	end
-	CancelWindowDrag = function()
-		if not drag.active then
-			return
-		end
-		drag.active = false
-		drag.target = nil
-		drag.current = nil
-		stopDragLoop()
-	end
-
-	local function pushDrag(input)
-		if not drag.active or not drag.center or not drag.start or not input then
-			return
-		end
-		if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
-			return
-		end
-		local pos = input.Position
-		if not pos then
-			return
-		end
-		drag.target = clampCenter(drag.center + (Vector2.new(pos.X, pos.Y) - drag.start))
-	end
-
-	local function beginDrag(input, fromHandle)
-		if DESTROYED or not input then
-			return
-		end
-		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
-			return
-		end
-		local pos = input.Position
-		if not pos then
-			return
-		end
-		if not MainVisible or MainColumn.Visible == false then
-			return
-		end
-		if Customize and Customize.Visible then
-			return
-		end
-		local point = Vector2.new(pos.X, pos.Y)
-		if overClose(point) then
-			return
-		end
-		if not fromHandle and (not overWindow(point) or blockedAt(point) or isInteractive(input.Target)) then
-			return
-		end
-		if drag.active then
-			finishDrag()
-		end
-		drag.active = true
-		drag.start = point
-		local ap = MainColumn.AbsolutePosition
-		local as = MainColumn.AbsoluteSize
-		drag.center = Vector2.new(ap.X + as.X * 0.5, ap.Y + as.Y * 0.5)
-		drag.target = drag.center
-		drag.current = drag.center
-		cancelPropTweens(MainColumn, { Position = true })
-		startDragLoop()
-	end
-	trackConn(UserInputService.InputBegan:Connect(function(input)
-		beginDrag(input, false)
-	end))
-	trackConn(UserInputService.InputChanged:Connect(pushDrag))
-	trackConn(UserInputService.TouchMoved:Connect(pushDrag))
-	trackConn(UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
-			return
-		end
-		finishDrag()
-	end))
-	titlebar.Active = true
-	trackConn(titlebar.InputBegan:Connect(function(input)
-		beginDrag(input, true)
-	end))
-	trackConn(titlebar.InputChanged:Connect(pushDrag))
-
-	SidebarPanel = new("Frame", {
-		Name = "Sidebar",
-		Position = UDim2.new(0, 8, 0, topH + 8),
-		Size = UDim2.new(0, 168, 1, -(topH + 16)),
-		BackgroundColor3 = TC.sidebar,
-		BackgroundTransparency = 0,
-		BorderSizePixel = 0,
-		Role = "Sidebar",
-		ZIndex = 4,
-	}, MainColumn)
-	new("UICorner", { CornerRadius = UDim.new(0, L.CornerRadius), Role = "Corner" }, SidebarPanel)
-	new("UIStroke", { Color = TC.textPrimary, Transparency = CURRENT_THEME.StrokeTransparency + 0.04, Thickness = 1, Role = "CardEdge" }, SidebarPanel)
-	local portraitId = tostring(CONFIG.Brand.AvatarImageId or ""):gsub("%D", "")
-	local avatar = new("Frame", {
-		Name = "Avatar",
-		Position = UDim2.new(0, 14, 0, 13),
-		Size = UDim2.new(0, 34, 0, 34),
-		BackgroundColor3 = TC.accent,
-		BackgroundTransparency = 0,
-		BorderSizePixel = 0,
-		Role = "Accent",
-		ZIndex = 6,
-	}, SidebarPanel)
-	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, avatar)
-	new("UIStroke", { Color = TC.textPrimary, Transparency = 0.84, Thickness = 1, Role = "Soft" }, avatar)
-	makeLabel({
-		Name = "Letter",
-		Text = string.sub(sanitizeString(tostring(CONFIG.Brand.Name or "B"), 24), 1, 1),
-		Tier = "OnAccent",
-		TextRole = "Caption",
-		Bold = true,
-		FixedSize = true,
-		TextSize = 16,
-		Size = UDim2.fromScale(1, 1),
-		TextXAlignment = Enum.TextXAlignment.Center,
-		ZIndex = 7,
-	}, avatar)
-	local portrait = new("ImageLabel", {
-		Name = "Portrait",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		Image = portraitId ~= "" and ("rbxassetid://" .. portraitId) or "",
-		ScaleType = Enum.ScaleType.Crop,
-		Visible = portraitId ~= "",
-		ZIndex = 8,
-	}, avatar)
-	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, portrait)
-	if portraitId == "" and PLAYER then
-		task.spawn(function()
-			local ok, url = pcall(function()
-				return Players:GetUserThumbnailAsync(PLAYER.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
-			end)
-			if ok and type(url) == "string" and url ~= "" and not DESTROYED and portrait.Parent then
-				portrait.Image = url
-				portrait.Visible = true
-			end
-		end)
-	end
-	makeLabel({
-		Name = "Brand",
-		Text = sanitizeString(tostring(CONFIG.Brand.Name or "Blossom"), 24),
-		Tier = "Primary",
-		TextRole = "Body",
-		Bold = true,
-		FixedSize = true,
-		TextSize = 15,
-		Position = UDim2.new(0, 56, 0, 12),
-		Size = UDim2.new(1, -64, 0, 20),
-		Truncate = true,
-		ZIndex = 6,
-	}, SidebarPanel)
-	makeLabel({
-		Name = "Tag",
-		Text = sanitizeString(tostring(CONFIG.Brand.Tag or "script hub"), 24),
-		Tier = "Secondary",
-		TextRole = "Caption",
-		FixedSize = true,
-		TextSize = 11,
-		Position = UDim2.new(0, 56, 0, 30),
-		Size = UDim2.new(1, -64, 0, 16),
-		ZIndex = 6,
-	}, SidebarPanel)
-
-	NavList = new("ScrollingFrame", {
-		Name = "Nav",
-		Position = UDim2.new(0, 8, 0, 66),
-		Size = UDim2.new(1, -16, 1, -130),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		CanvasSize = UDim2.new(0, 0, 0, 0),
-		ScrollingDirection = Enum.ScrollingDirection.Y,
-		ScrollBarThickness = 0,
-		ZIndex = 5,
-	}, SidebarPanel)
-	NavPill = new("Frame", {
-		Name = "Pill",
-		Position = UDim2.new(0, 0, 0, 0),
-		Size = UDim2.new(1, 0, 0, 32),
-		BackgroundColor3 = TC.accent,
-		BackgroundTransparency = 0.88,
-		BorderSizePixel = 0,
-		ZIndex = 5,
-	}, NavList)
-	new("UICorner", { CornerRadius = UDim.new(0, 8), Role = "Small" }, NavPill)
-	NavIndicator = new("Frame", {
-		Name = "Indicator",
-		Position = UDim2.new(0, -6, 0, 8),
-		Size = UDim2.new(0, 3, 0, 16),
-		BackgroundColor3 = TC.accent,
-		BorderSizePixel = 0,
-		Role = "Accent",
-		ZIndex = 7,
-	}, NavPill)
-	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, NavIndicator)
-
-	local footer = new("Frame", {
-		Name = "Footer",
-		Position = UDim2.new(0, 0, 1, -58),
-		Size = UDim2.new(1, 0, 0, 58),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ZIndex = 6,
-	}, SidebarPanel)
-	new("Frame", {
-		Name = "FooterSep",
-		Position = UDim2.new(0, 10, 0, 0),
-		Size = UDim2.new(1, -20, 0, 1),
-		BackgroundColor3 = TC.divider,
-		BackgroundTransparency = 0.4,
-		BorderSizePixel = 0,
-		Role = "Divider",
-		ZIndex = 6,
-	}, footer)
-	local customizeBtn = makeButton(footer, {
-		Text = "Customize",
-		Variant = "Ghost",
-		Size = UDim2.new(1, -24, 0, 28),
-		TextSize = L.CaptionSize + 1,
-	})
-	customizeBtn.Instance.Position = UDim2.new(0, 12, 0, 8)
-	trackConn(customizeBtn.Instance.MouseButton1Click:Connect(function()
-		openCustomize()
-	end))
-	local chip = new("Frame", {
-		Name = "Chip",
-		Position = UDim2.new(0, 12, 0, 36),
-		Size = UDim2.new(0, 24, 0, 16),
-		BackgroundColor3 = TC.button,
-		BorderSizePixel = 0,
-		Role = "Button",
-		ZIndex = 6,
-	}, footer)
-	new("UICorner", { CornerRadius = UDim.new(0, 4), Role = "Small" }, chip)
-	makeLabel({
-		Name = "Key",
-		Text = "RS",
-		Tier = "Secondary",
-		TextRole = "Caption",
-		FixedSize = true,
-		TextSize = 10,
-		Size = UDim2.fromScale(1, 1),
-		TextXAlignment = Enum.TextXAlignment.Center,
-		ZIndex = 7,
-	}, chip)
-	makeLabel({
-		Name = "Hint",
-		Text = "close · drag",
-		Tier = "Disabled",
-		TextRole = "Caption",
-		FixedSize = true,
-		TextSize = 10,
-		Position = UDim2.new(0, 42, 0, 36),
-		Size = UDim2.new(1, -52, 0, 16),
-		Truncate = true,
-		ZIndex = 6,
-	}, footer)
-
-	ContentPanel = new("Frame", {
-		Name = "Content",
-		Position = UDim2.new(0, 168, 0, topH),
-		Size = UDim2.new(1, -168, 1, -topH),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ZIndex = 4,
-	}, MainColumn)
-	local banner = new("Frame", {
-		Name = "Header",
-		Size = UDim2.new(1, 0, 0, headerH),
-		BackgroundColor3 = TC.base,
-		BorderSizePixel = 0,
-		ClipsDescendants = true,
-		ZIndex = 1,
-	}, ContentPanel)
-	new("UIGradient", { Role = "Header" }, banner)
-	local headerMark = new("Frame", {
-		Name = "Mark",
-		Position = UDim2.new(0, 18, 0, 24),
-		Size = UDim2.new(0, 3, 0, 16),
-		BackgroundColor3 = TC.accent,
-		BorderSizePixel = 0,
-		Role = "Accent",
-		ZIndex = 4,
-	}, banner)
-	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, headerMark)
-	BannerTitle = makeLabel({
-		Name = "Title",
-		Text = "Home",
-		Tier = "Primary",
-		TextRole = "Title",
-		Bold = true,
-		FixedSize = true,
-		TextSize = 18,
-		Position = UDim2.new(0, 29, 0, 20),
-		Size = UDim2.new(1, -45, 0, 24),
-		Truncate = true,
-		ZIndex = 4,
-	}, banner)
-	BannerSubtitle = makeLabel({
-		Name = "Sub",
-		Text = "",
-		Tier = "Secondary",
-		TextRole = "Caption",
-		FixedSize = true,
-		TextSize = 11,
-		Position = UDim2.new(0, 29, 0, 44),
-		Size = UDim2.new(1, -45, 0, 16),
-		Truncate = true,
-		ZIndex = 4,
-	}, banner)
-	new("Frame", {
-		Name = "HeaderRule",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, 0, 1, 0),
-		Size = UDim2.new(1, 0, 0, 1),
-		BackgroundColor3 = TC.divider,
-		BorderSizePixel = 0,
-		Role = "Divider",
-		ZIndex = 4,
-	}, banner)
-
-	local pagesHost = new("Frame", {
-		Name = "Pages",
-		Position = UDim2.new(0, 0, 0, headerH),
-		Size = UDim2.new(1, 0, 1, -headerH),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ClipsDescendants = true,
-		ZIndex = 2,
-	}, ContentPanel)
-	local pagesVeil = new("Frame", {
-		Name = "Veil",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = TC.base,
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Active = false,
-		ZIndex = 20,
-		Role = "Surface",
-	}, pagesHost)
-	local pages = {}
-	local pageMeta = {}
-	local navRows = {}
-	local navIcons = {}
-	local navLabels = {}
-	local activeIndex = 0
-	local loadersIndex = 0
-
-	local function switchPage(index)
-		if index == activeIndex or not pages[index] then
-			return
-		end
-		local out = pages[activeIndex]
-		local inn = pages[index]
-		activeIndex = index
-		if out then
-			out.Visible = false
-			out.Position = UDim2.fromOffset(0, 0)
-		end
-		inn.Visible = true
-		inn.ZIndex = 3
-		local slideTime = mdur(CONFIG.Durations.Slide)
-		local pillTime = mdur(0.24)
-		local fadeTime = mdur(0.2)
-		if QUALITY.Instant then
-			inn.Position = UDim2.fromOffset(0, 0)
-			slideTime = 0.16
-			pillTime = 0.12
-			fadeTime = 0.1
-		else
-			inn.Position = UDim2.fromOffset(0, 10)
-			playTween(inn, ti(slideTime, CONFIG.Easing.Slide, CONFIG.Easing.SlideDir), { Position = UDim2.fromOffset(0, 0) })
-			if pagesVeil then
-				pagesVeil.BackgroundTransparency = 0.84
-				playTween(pagesVeil, ti(fadeTime + 0.1, "Quad", "Out"), { BackgroundTransparency = 1 })
-			end
-		end
-		if NavPill then
-			playTween(NavPill, ti(pillTime, "Quint", "Out"), { Position = UDim2.new(0, 0, 0, (index - 1) * 34) })
-		end
-		for i, row in ipairs(navRows) do
-			local on = i == index
-			local label = navLabels[i]
-			local icon = navIcons[i]
-			if on then
-				row.BackgroundTransparency = 1
-				label:SetAttribute("Tier", "Accent")
-				tintIcon(icon, TC.accent, true)
-				uiTween(label, { TextColor3 = TC.accent }, 0.2, "Quad", "Out")
-			else
-				label:SetAttribute("Tier", "Secondary")
-				tintIcon(icon, TC.textDisabled, true)
-				uiTween(label, { TextColor3 = TC.textSecondary }, 0.2, "Quad", "Out")
-			end
-		end
-		local meta = pageMeta[index]
-		if BannerTitle and BannerSubtitle and meta then
-			BannerTitle.Text = meta.title
-			BannerSubtitle.Text = meta.subtitle or ""
-			BannerTitle.TextTransparency = 1
-			uiTween(BannerTitle, { TextTransparency = 0 }, 0.2, "Quad", "Out")
-			BannerSubtitle.TextTransparency = 1
-			uiTween(BannerSubtitle, { TextTransparency = 0 }, 0.26, "Quad", "Out")
-		end
-	end
-
-	local function addPage(title, subtitle)
-		local index = #pages + 1
-		local page = new("Frame", {
-			Name = "Page",
-			Size = UDim2.fromScale(1, 1),
-			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-			Position = UDim2.fromOffset(0, 0),
-			Visible = index == 1,
-			ZIndex = index == 1 and 3 or 1,
-		}, pagesHost)
-		local scroll = new("ScrollingFrame", {
-			Name = "Scroll",
-			Size = UDim2.fromScale(1, 1),
-			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-			CanvasSize = UDim2.new(0, 0, 0, 0),
-			AutomaticCanvasSize = Enum.AutomaticSize.Y,
-			ScrollingDirection = Enum.ScrollingDirection.Y,
-			ScrollBarThickness = 2,
-			ScrollBarImageColor3 = TC.accent,
-			ScrollBarImageTransparency = 0.6,
-		}, page)
-		new("UIPadding", {
-			PaddingTop = UDim.new(0, 12),
-			PaddingBottom = UDim.new(0, 14),
-			PaddingLeft = UDim.new(0, 12),
-			PaddingRight = UDim.new(0, 12),
-		}, scroll)
-		new("UIListLayout", {
-			Padding = UDim.new(0, 10),
-			SortOrder = Enum.SortOrder.LayoutOrder,
-			FillDirection = Enum.FillDirection.Vertical,
-		}, scroll)
-		pages[index] = page
-		pageMeta[index] = { title = title, subtitle = subtitle or "" }
-
-		local row = new("TextButton", {
-			Name = "NavRow",
-			Position = UDim2.new(0, 0, 0, (index - 1) * 34),
-			Size = UDim2.new(1, 0, 0, 32),
-			BackgroundColor3 = TC.button,
-			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-			AutoButtonColor = false,
-			Text = "",
-			Selectable = true,
-			ZIndex = 6,
-			Role = "Ghost",
-		}, NavList)
-		local icon = makeCategoryIcon(CATEGORY_ICONS[title] or "grid", row)
-		local label = makeLabel({
-			Name = "NavText",
-			Text = sanitizeString(tostring(title or "Page"), 24),
-			Tier = "Secondary",
-			TextRole = "Body",
-			Position = UDim2.new(0, 36, 0, 0),
-			Size = UDim2.new(1, -44, 1, 0),
-			Truncate = true,
-			ZIndex = 7,
-		}, row)
-		navRows[index] = row
-		navIcons[index] = icon
-		navLabels[index] = label
-		NavList.CanvasSize = UDim2.new(0, 0, 0, index * 34 + 2)
-		trackConn(row.MouseButton1Click:Connect(function()
-			switchPage(index)
-		end))
-		trackConn(row.MouseEnter:Connect(function()
-			if index ~= activeIndex then
-				hoverTween(row, { BackgroundTransparency = 0.94 }, true)
-			end
-		end))
-		trackConn(row.MouseLeave:Connect(function()
-			if index ~= activeIndex then
-				hoverTween(row, { BackgroundTransparency = 1 }, false)
-			end
-		end))
-		if index == 1 then
-			activeIndex = 1
-			tintIcon(icon, TC.accent, false)
-			label.TextColor3 = TC.accent
-			label:SetAttribute("Tier", "Accent")
-			if BannerSubtitle then
-				BannerSubtitle.Text = subtitle or ""
-			end
-		end
-		return scroll
-	end
-
-	task.wait()
-	if DESTROYED then
-		return
-	end
-
-	local home = addPage("Home", "quick actions")
-	local actions = makeSection(home, "Quick actions", 2)
-	makeSettingRow(actions, {
-		Label = "Customize",
-		Order = 0,
-		ControlWidth = 88,
-		Build = function(row)
-			local button = makeButton(row, { Text = "Open", Size = UDim2.new(0, 66, 0, 26), TextSize = L.CaptionSize + 1 })
-			button.Instance.AnchorPoint = Vector2.new(1, 0.5)
-			button.Instance.Position = UDim2.new(1, -10, 0.5, 0)
-			trackConn(button.Instance.MouseButton1Click:Connect(function()
-				openCustomize()
-			end))
-		end,
-	})
-	makeSettingRow(actions, {
-		Label = "Loading animations",
-		Order = 1,
-		ControlWidth = 88,
-		Build = function(row)
-			local button = makeButton(row, { Text = "Browse", Variant = "Ghost", Size = UDim2.new(0, 66, 0, 26), TextSize = L.CaptionSize + 1 })
-			button.Instance.AnchorPoint = Vector2.new(1, 0.5)
-			button.Instance.Position = UDim2.new(1, -10, 0.5, 0)
-			trackConn(button.Instance.MouseButton1Click:Connect(function()
-				switchPage(loadersIndex)
-			end))
-		end,
-	})
-	makeSettingRow(actions, {
-		Label = "Auto execute",
-		Order = 2,
-		ControlWidth = 88,
-		Build = function(row)
-			local button = makeButton(row, { Text = "Off", Variant = "Ghost", Size = UDim2.new(0, 54, 0, 26), TextSize = L.CaptionSize + 1 })
-			button.Instance.AnchorPoint = Vector2.new(1, 0.5)
-			button.Instance.Position = UDim2.new(1, -10, 0.5, 0)
-			local function paint()
-				button:SetText(AutoExecute and "On" or "Off")
-				button:SetActive(AutoExecute)
-			end
-			paint()
-			trackConn(button.Instance.MouseButton1Click:Connect(function()
-				AutoExecute = not AutoExecute
-				paint()
-				saveCustomSkins()
-				if AutoExecute then
-					toast("Auto execute on")
-				else
-					toast("Auto execute off")
-				end
-			end))
-		end,
-	})
-
-	task.wait()
-	if DESTROYED then
-		return
-	end
-
-	loadersIndex = #pages + 1
-	local loaders = addPage("Loader", "loading animation")
-	local loaderSection = makeSection(loaders, "Animation", 1)
-	makeSettingRow(loaderSection, {
-		Label = "Blossom loader",
-		Order = 1,
-		ControlWidth = 88,
-		Build = function(row)
-			local button = makeButton(row, { Text = "Play", Variant = "Primary", Size = UDim2.new(0, 66, 0, 26), TextSize = L.CaptionSize + 1 })
-			button.Instance.AnchorPoint = Vector2.new(1, 0.5)
-			button.Instance.Position = UDim2.new(1, -10, 0.5, 0)
-			trackConn(button.Instance.MouseButton1Click:Connect(function()
-				playGallery()
-			end))
-		end,
-	})
-	local playback = makeSection(loaders, "Playback", 2)
-	makeToggle(playback, {
-		Text = "Loop animations",
-		Value = CONFIG.Gallery.LoopEnabled,
-		Order = 1,
-		OnChange = function(value)
-			GalleryState.loop = value
-		end,
-	})
-	makeSettingRow(playback, {
-		Label = "Speed",
-		Order = 2,
-		ControlWidth = 164,
-		Build = function(row)
-			local speeds = CONFIG.Gallery.Speeds
-			for index, speed in ipairs(speeds) do
-				local button = makeButton(row, {
-					Text = tostring(speed) .. "x",
-					Size = UDim2.new(0, 44, 0, 24),
-					TextSize = L.CaptionSize,
-					Order = index,
-				})
-				button.Instance.AnchorPoint = Vector2.new(1, 0.5)
-				button.Instance.Position = UDim2.new(1, -10 - (#speeds - index) * 50, 0.5, 0)
-				SpeedButtons[speed] = button
-				trackConn(button.Instance.MouseButton1Click:Connect(function()
-					GalleryState.speed = speed
-					for otherSpeed, otherBtn in pairs(SpeedButtons) do
-						setButtonActive(otherBtn, otherSpeed == speed)
-					end
-					toast("Speed " .. tostring(speed) .. "x")
-				end))
-			end
-			local defaultBtn = SpeedButtons[CONFIG.Gallery.DefaultSpeed]
-			if defaultBtn then
-				setButtonActive(defaultBtn, true)
-			end
-		end,
-	})
-
-	task.wait()
-	if DESTROYED then
-		return
-	end
-
-	buildFeatures(addPage)
-
-	task.wait()
-	if DESTROYED then
-		return
-	end
-
-	local settings = addPage("Settings", "appearance and about")
-	local appearance = makeSection(settings, "Appearance", 2)
-	makeLabel({
-		Name = "ThemeLabel",
-		Text = "Theme",
-		Tier = "Secondary",
-		TextRole = "Caption",
-		Bold = true,
-		FixedSize = true,
-		TextSize = 11,
-		Size = UDim2.new(1, 0, 0, 20),
-		LayoutOrder = 1,
-	}, appearance)
-	local themeChips = new("Frame", {
-		Name = "ThemeChips",
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
-		LayoutOrder = 2,
-	}, appearance)
-	new("UIListLayout", {
-		Padding = UDim.new(0, 6),
-		FillDirection = Enum.FillDirection.Horizontal,
-		Wraps = true,
-		SortOrder = Enum.SortOrder.LayoutOrder,
-	}, themeChips)
-	rebuildThemeChips = function()
-		for _, child in ipairs(themeChips:GetChildren()) do
-			if child:IsA("TextButton") then
-				child:Destroy()
-			end
-		end
-		SkinButtons = {}
-		local active = PLAYER and PLAYER:GetAttribute("BlossomSkin") or CURRENT_THEME.Name
-		for index, name in ipairs(skinNames()) do
-			local chip = makeButton(themeChips, {
-				Text = name,
-				Variant = "Ghost",
-				Size = UDim2.new(0, math.clamp(22 + #name * 7, 80, 132), 0, 24),
-				TextSize = L.CaptionSize,
-				Order = index,
-			})
-			SkinButtons[name] = chip
-			setButtonActive(chip, name == active)
-			trackConn(chip.Instance.MouseButton1Click:Connect(function()
-				applyTheme(SKINS[name], true)
-				if PLAYER then
-					PLAYER:SetAttribute("BlossomSkin", name)
-				end
-				saveCustomSkins()
-				for otherName, otherBtn in pairs(SkinButtons) do
-					setButtonActive(otherBtn, otherName == name)
-				end
-				toast("Theme: " .. name)
-			end))
-		end
-		ThemeCache.list = nil
-	end
-	rebuildThemeChips()
-	makeSettingRow(appearance, {
-		Label = "Theme JSON",
-		Order = 2,
-		ControlWidth = 88,
-		Build = function(row)
-			local button = makeButton(row, { Text = "Edit", Variant = "Ghost", Size = UDim2.new(0, 66, 0, 26), TextSize = L.CaptionSize + 1 })
-			button.Instance.AnchorPoint = Vector2.new(1, 0.5)
-			button.Instance.Position = UDim2.new(1, -10, 0.5, 0)
-			trackConn(button.Instance.MouseButton1Click:Connect(function()
-				openCustomize()
-			end))
-		end,
-	})
-	makeSettingRow(appearance, {
-		Label = "Re-read config",
-		Order = 3,
-		ControlWidth = 88,
-		Build = function(row)
-			local button = makeButton(row, { Text = "Apply", Variant = "Ghost", Size = UDim2.new(0, 66, 0, 26), TextSize = L.CaptionSize + 1 })
-			button.Instance.AnchorPoint = Vector2.new(1, 0.5)
-			button.Instance.Position = UDim2.new(1, -10, 0.5, 0)
-			trackConn(button.Instance.MouseButton1Click:Connect(function()
-				applyConfigNow()
-			end))
-		end,
-	})
-
-	local info = makeSection(settings, "Info", 3)
-	local infoRows = {
-		{ "Version", "Blossom 2.0" },
-	}
-	for i, entry in ipairs(infoRows) do
-		makeListRow(info, { Title = entry[1], Subtitle = entry[2], Order = i })
-	end
-	table.insert(REFRESH, function()
-		if NavPill then
-			NavPill.BackgroundColor3 = TC.accent
-			NavPill.BackgroundTransparency = 0.88
-		end
-		if NavIndicator then
-			NavIndicator.BackgroundColor3 = TC.accent
-		end
-		for i, row in ipairs(navRows) do
-			row.BackgroundColor3 = TC.button
-			row.BackgroundTransparency = 1
-			if navLabels[i] then
-				navLabels[i].TextColor3 = i == activeIndex and TC.accent or TC.textSecondary
-			end
-			tintIcon(navIcons[i], i == activeIndex and TC.accent or TC.textDisabled, false)
-		end
-	end)
-	updateScale()
-end
+local reportsStatus
 
 local function buildCustomize()
-	Customize = new("Frame", {
+	local customize = new("Frame", {
 		Name = "Customize",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		Visible = false,
 		ZIndex = 8,
-	}, Root)
+	}, State.root)
+	State.customize = customize
 	local modal = new("Frame", {
 		Name = "Modal",
 		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = TC.dim,
-		BackgroundTransparency = CURRENT_THEME.DimTransparency,
+		BackgroundColor3 = Tokens.dim,
+		BackgroundTransparency = State.theme.DimTransparency,
 		BorderSizePixel = 0,
+		Active = true,
 		Role = "Backdrop",
 		ZIndex = 8,
-	}, Customize)
-	trackConn(modal.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			closeCustomize()
-		end
-	end))
+	}, customize)
+	modal:SetAttribute("BackdropLevel", "modal")
+	local scale = (State.rootScale and State.rootScale.Scale) or 1
+	local panelWidth = math.floor(math.min(440, Metrics.viewport.X / math.max(0.1, scale) - 24))
+	local boxHeight = math.floor(clamp(Metrics.viewport.Y / math.max(0.1, scale) * 0.3, 96, 220))
 	local panel = new("Frame", {
 		Name = "Panel",
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.new(0, fitWidth(440), 0, 0),
+		Size = UDim2.new(0, panelWidth, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		BackgroundColor3 = TC.card,
-		BackgroundTransparency = 0,
+		BackgroundColor3 = Tokens.card,
 		BorderSizePixel = 0,
+		Active = true,
 		Role = "Card",
 		ZIndex = 9,
-	}, Customize)
-	new("UISizeConstraint", { MaxSize = Vector2.new(440, 100000) }, panel)
-	new("UICorner", { CornerRadius = UDim.new(0, CONFIG.Layout.CornerRadius), Role = "Corner" }, panel)
-	new("UIStroke", { Color = Color3.new(1, 1, 1), Transparency = CURRENT_THEME.StrokeTransparency, Thickness = 1, Role = "Edge" }, panel)
-	new("UIScale", { Scale = 0.96 }, panel)
+	}, customize)
+	State.customizePanel = panel
+	new("UISizeConstraint", { MaxSize = Vector2.new(460, 100000) }, panel)
+	new("UICorner", { CornerRadius = UDim.new(0, Metrics.corner), Role = "Corner" }, panel)
+	new("UIStroke", {
+		Color = Tokens.textPrimary,
+		Transparency = State.theme.StrokeTransparency,
+		Thickness = 1,
+		Role = "Edge",
+	}, panel)
 	new("UIPadding", {
-		PaddingTop = UDim.new(0, 14),
-		PaddingBottom = UDim.new(0, 14),
-		PaddingLeft = UDim.new(0, 14),
-		PaddingRight = UDim.new(0, 14),
+		PaddingTop = UDim.new(0, 12),
+		PaddingBottom = UDim.new(0, 12),
+		PaddingLeft = UDim.new(0, 12),
+		PaddingRight = UDim.new(0, 12),
 	}, panel)
 	new("UIListLayout", {
-		Padding = UDim.new(0, 10),
+		Padding = UDim.new(0, 8),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 		FillDirection = Enum.FillDirection.Vertical,
 	}, panel)
@@ -4109,8 +3811,7 @@ local function buildCustomize()
 		Size = UDim2.new(1, 0, 0, 24),
 		LayoutOrder = 0,
 	}, panel)
-	makeLabel({
-		Name = "Title",
+	makeLabel(header, {
 		Text = "Customize",
 		Tier = "Primary",
 		TextRole = "Title",
@@ -4118,54 +3819,52 @@ local function buildCustomize()
 		FixedSize = true,
 		TextSize = 17,
 		Size = UDim2.new(1, -34, 1, 0),
-	}, header)
-	local closeBtn = makeButton(header, {
+	})
+	local close = makeButton(header, {
 		Text = "X",
 		Variant = "Ghost",
-		Size = UDim2.new(0, 22, 0, 22),
+		Size = UDim2.new(0, 28, 0, 28),
 		TextSize = 11,
 		Bold = true,
 		Radius = 6,
 	})
-	closeBtn.Instance.AnchorPoint = Vector2.new(1, 0.5)
-	closeBtn.Instance.Position = UDim2.new(1, 0, 0.5, 0)
-	trackConn(closeBtn.Instance.MouseButton1Click:Connect(function()
+	close.Instance.AnchorPoint = Vector2.new(1, 0.5)
+	close.Instance.Position = UDim2.new(1, 0, 0.5, 0)
+	close:Bind(function()
 		closeCustomize()
-	end))
+	end)
 
-	makeLabel({
-		Name = "Sub",
-		Text = "Paste theme or config JSON, then Apply or Save as a theme.",
+	makeLabel(panel, {
+		Text = "Paste theme or config JSON, then Apply. Theme JSON can be saved as a skin.",
 		Tier = "Secondary",
 		TextRole = "Caption",
-		Size = UDim2.new(1, 0, 0, 16),
+		Size = UDim2.new(1, 0, 0, 30),
+		Wrapped = true,
 		LayoutOrder = 1,
-		Truncate = true,
-	}, panel)
+	})
 
 	local tabs = new("Frame", {
 		Name = "Tabs",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, 0, 0, 26),
+		Size = UDim2.new(1, 0, 0, 28),
 		LayoutOrder = 2,
 	}, panel)
-	local themeTab = makeButton(tabs, { Text = "Theme JSON", Variant = "Ghost", Size = UDim2.new(0, 104, 1, 0), TextSize = CONFIG.Layout.CaptionSize, Order = 0 })
-	local configTab = makeButton(tabs, { Text = "Config JSON", Variant = "Ghost", Size = UDim2.new(0, 104, 1, 0), TextSize = CONFIG.Layout.CaptionSize, Order = 1 })
+	local themeTab = makeButton(tabs, { Text = "Theme JSON", Variant = "Ghost", Size = UDim2.new(0, 104, 1, 0), TextSize = Metrics.captionSize, Order = 1 })
+	local configTab = makeButton(tabs, { Text = "Config JSON", Variant = "Ghost", Size = UDim2.new(0, 104, 1, 0), TextSize = Metrics.captionSize, Order = 2 })
 	configTab.Instance.Position = UDim2.new(0, 110, 0, 0)
 
 	local box = new("TextBox", {
-		Name = "JsonBox",
-		BackgroundColor3 = TC.base,
-		BackgroundTransparency = 0,
+		Name = "Json",
+		BackgroundColor3 = Tokens.base,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, 0, 0, 186),
+		Size = UDim2.new(1, 0, 0, boxHeight),
 		Text = "",
 		PlaceholderText = "Paste JSON here",
 		Font = themeFont(),
-		TextSize = CONFIG.Layout.CaptionSize,
-		TextColor3 = TC.textPrimary,
-		PlaceholderColor3 = TC.textDisabled,
+		TextSize = Metrics.captionSize,
+		TextColor3 = Tokens.textPrimary,
+		PlaceholderColor3 = Tokens.textDisabled,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Top,
 		TextWrapped = true,
@@ -4176,421 +3875,672 @@ local function buildCustomize()
 		TextRole = "Caption",
 		Role = "Input",
 	}, panel)
-	new("UICorner", { CornerRadius = UDim.new(0, CONFIG.Layout.SmallCornerRadius - 2), Role = "Small" }, box)
-	new("UIStroke", { Color = Color3.new(1, 1, 1), Transparency = CURRENT_THEME.StrokeTransparency, Thickness = 1, Role = "Edge" }, box)
-	new("UIPadding", { PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, box)
-	JsonBox = box
+	new("UICorner", { CornerRadius = UDim.new(0, 6), Role = "Small" }, box)
+	new("UIStroke", { Color = Tokens.textPrimary, Transparency = State.theme.StrokeTransparency, Thickness = 1, Role = "Edge" }, box)
+	new("UIPadding", {
+		PaddingTop = UDim.new(0, 8),
+		PaddingBottom = UDim.new(0, 8),
+		PaddingLeft = UDim.new(0, 10),
+		PaddingRight = UDim.new(0, 10),
+	}, box)
+	State.jsonBox = box
 
 	local nameBox = new("TextBox", {
-		Name = "ThemeName",
-		BackgroundColor3 = TC.base,
-		BackgroundTransparency = 0,
+		Name = "Name",
+		BackgroundColor3 = Tokens.base,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, 0, 0, 30),
+		Size = UDim2.new(1, 0, 0, 32),
 		Text = "",
 		PlaceholderText = "Name for the imported theme",
 		Font = themeFont(),
-		TextSize = CONFIG.Layout.CaptionSize + 1,
-		TextColor3 = TC.textPrimary,
-		PlaceholderColor3 = TC.textDisabled,
+		TextSize = Metrics.captionSize + 1,
+		TextColor3 = Tokens.textPrimary,
+		PlaceholderColor3 = Tokens.textDisabled,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		ClearTextOnFocus = false,
-		TextWrapped = false,
 		LayoutOrder = 4,
 		Tier = "Primary",
 		TextRole = "Body",
 		Role = "Input",
 	}, panel)
-	new("UICorner", { CornerRadius = UDim.new(0, CONFIG.Layout.SmallCornerRadius - 2), Role = "Small" }, nameBox)
-	new("UIStroke", { Color = Color3.new(1, 1, 1), Transparency = CURRENT_THEME.StrokeTransparency, Thickness = 1, Role = "Edge" }, nameBox)
-	new("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, nameBox)
+	new("UICorner", { CornerRadius = UDim.new(0, 6), Role = "Small" }, nameBox)
+	new("UIStroke", { Color = Tokens.textPrimary, Transparency = State.theme.StrokeTransparency, Thickness = 1, Role = "Edge" }, nameBox)
+	new("UIPadding", {
+		PaddingTop = UDim.new(0, 6),
+		PaddingBottom = UDim.new(0, 6),
+		PaddingLeft = UDim.new(0, 10),
+		PaddingRight = UDim.new(0, 10),
+	}, nameBox)
+	State.nameBox = nameBox
 
-	StatusLabel = makeLabel({
-		Name = "Status",
+	local status = makeLabel(panel, {
 		Text = "Paste a theme or config object, then Apply.",
 		Tier = "Secondary",
 		TextRole = "Caption",
 		Size = UDim2.new(1, 0, 0, 32),
-		TextYAlignment = Enum.TextYAlignment.Top,
-		TextWrapped = true,
+		YAlign = Enum.TextYAlignment.Top,
+		Wrapped = true,
 		LayoutOrder = 5,
-	}, panel)
+	})
+	State.statusLabel = status
 
 	local actions = new("Frame", {
 		Name = "Actions",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, 0, 0, 28),
+		Size = UDim2.new(1, 0, 0, math.max(30, Metrics.button)),
 		LayoutOrder = 6,
 	}, panel)
-	local apply = makeButton(actions, { Text = "Apply", Variant = "Primary", Size = UDim2.new(0, 74, 1, 0), TextSize = CONFIG.Layout.CaptionSize + 1, Order = 0 })
-	local save = makeButton(actions, { Text = "Save", Variant = "Ghost", Size = UDim2.new(0, 74, 1, 0), TextSize = CONFIG.Layout.CaptionSize + 1, Order = 1 })
-	save.Instance.Position = UDim2.new(0, 80, 0, 0)
-	local exp = makeButton(actions, { Text = "Export", Variant = "Ghost", Size = UDim2.new(0, 74, 1, 0), TextSize = CONFIG.Layout.CaptionSize + 1, Order = 2 })
-	exp.Instance.Position = UDim2.new(0, 160, 0, 0)
-	local reset = makeButton(actions, { Text = "Reset", Variant = "Ghost", Size = UDim2.new(0, 74, 1, 0), TextSize = CONFIG.Layout.CaptionSize + 1, Order = 3 })
-	reset.Instance.Position = UDim2.new(0, 240, 0, 0)
-
-	local function markTab(name)
-		setButtonActive(themeTab, name == "Theme")
-		setButtonActive(configTab, name == "Config")
+	local actionWidth = math.floor((panelWidth - 24 - 18) / 4)
+	local actionLabels = { "Apply", "Save", "Export", "Reset" }
+	local actionButtons = {}
+	for index, text in ipairs(actionLabels) do
+		local button = makeButton(actions, {
+			Text = text,
+			Variant = index == 1 and "Primary" or "Ghost",
+			Size = UDim2.new(0, actionWidth, 1, 0),
+			TextSize = Metrics.captionSize + 1,
+			Order = index,
+		})
+		button.Instance.AnchorPoint = Vector2.new(0, 0)
+		button.Instance.Position = UDim2.new(0, (index - 1) * (actionWidth + 6), 0, 0)
+		actionButtons[index] = button
 	end
-	markTab("Theme")
 
-	trackConn(themeTab.Instance.MouseButton1Click:Connect(function()
-		CustomTab = "Theme"
-		markTab("Theme")
-		statusText("Theme JSON mode. Export dumps the active theme.", false)
-	end))
-	trackConn(configTab.Instance.MouseButton1Click:Connect(function()
-		CustomTab = "Config"
-		markTab("Config")
-		statusText("Config JSON mode. Paste Durations, Easing, Layout or Theme.", false)
-	end))
-	trackConn(exp.Instance.MouseButton1Click:Connect(function()
-		if CustomTab == "Theme" then
-			JsonBox.Text = themeToJSON(CURRENT_THEME)
-			statusText("Current theme copied into the box.", false)
-		else
-			local payload = {
-				Durations = CONFIG.Durations,
-				Easing = CONFIG.Easing,
-				Layout = CONFIG.Layout,
-			}
-			local ok, json = pcall(function()
-				return HttpService:JSONEncode(payload)
-			end)
-			if ok and type(json) == "string" then
-				JsonBox.Text = json
-				statusText("Current config copied into the box.", false)
-			else
-				statusText("Export failed.", true)
-			end
-		end
-	end))
-	trackConn(reset.Instance.MouseButton1Click:Connect(function()
-		if CustomTab == "Theme" then
-			applyTheme(SKINS["Sakura"], true)
-			if PLAYER then
-				PLAYER:SetAttribute("BlossomSkin", "Sakura")
-			end
-			saveCustomSkins()
-			JsonBox.Text = themeToJSON(CURRENT_THEME)
-			if rebuildThemeChips then
-				rebuildThemeChips()
-			end
-			statusText("Reset to Sakura.", false)
-		else
-			statusText("Config kept. Paste a config object and press Apply.", false)
-		end
-	end))
-	trackConn(save.Instance.MouseButton1Click:Connect(function()
-		if CustomTab ~= "Theme" then
-			statusText("Switch to Theme JSON to save a theme.", true)
-			return
-		end
-		local data, decodeError = decodeJSON(JsonBox.Text)
+	State.customTab = "Theme"
+	local function setTab(tab)
+		State.customTab = tab == "Config" and "Config" or "Theme"
+		themeTab:SetActive(State.customTab == "Theme")
+		configTab:SetActive(State.customTab == "Config")
+		setStatusLabel(State.customTab == "Theme" and "Theme JSON mode. Export dumps the active theme." or "Config JSON mode. Paste Durations, Easing or Layout.", false)
+	end
+	State.setCustomTab = setTab
+	themeTab:Bind(function()
+		setTab("Theme")
+	end)
+	configTab:Bind(function()
+		setTab("Config")
+	end)
+
+	local apply = actionButtons[1]
+	local save = actionButtons[2]
+	local export = actionButtons[3]
+	local reset = actionButtons[4]
+
+	apply:Bind(function()
+		local data, decodeError = decodeJSON(box.Text)
 		if not data then
-			statusText(decodeError or "invalid JSON", true)
+			setStatusLabel(decodeError, true)
 			return
 		end
-		local clean, errors, notes = validateTheme(data)
+		if State.customTab == "Theme" then
+			local cleanTheme, errors, notes = validateTheme(data)
+			if #errors > 0 then
+				setStatusLabel(table.concat(errors, "; "), true)
+				return
+			end
+			preloadThemeImages(cleanTheme)
+			applyTheme(cleanTheme, true)
+			local message = "Theme applied."
+			if #notes > 0 then
+				message = message .. " " .. table.concat(notes, "; ")
+			end
+			setStatusLabel(message, false)
+			toast("Theme applied")
+		else
+			local config, errors, notes = validateConfig(data)
+			if #errors > 0 then
+				setStatusLabel(table.concat(errors, "; "), true)
+				return
+			end
+			local themeOverride = nil
+			for key, value in pairs(config) do
+				if key == "Theme" then
+					themeOverride = value
+				else
+					CONFIG[key] = value
+				end
+			end
+			updateLayout()
+			applyTheme(themeOverride or State.theme, themeOverride ~= nil)
+			local message = "Config applied."
+			if #notes > 0 then
+				message = message .. " " .. table.concat(notes, "; ")
+			end
+			setStatusLabel(message, false)
+			toast("Config applied")
+		end
+	end)
+
+	save:Bind(function()
+		if State.customTab ~= "Theme" then
+			setStatusLabel("Switch to Theme JSON to save a skin.", true)
+			return
+		end
+		local data, decodeError = decodeJSON(box.Text)
+		if not data then
+			setStatusLabel(decodeError, true)
+			return
+		end
+		local cleanTheme, errors, notes = validateTheme(data)
 		if #errors > 0 then
-			statusText(table.concat(errors, "; "), true)
+			setStatusLabel(table.concat(errors, "; "), true)
 			return
 		end
-		local typed = sanitizeString(nameBox.Text or "", 24)
-		local label = typed
-		if label == "" then
-			label = sanitizeString(tostring(clean.Name or ""), 24)
-		end
+		local typed = clean(nameBox.Text, 24)
+		local label = typed ~= "" and typed or clean(tostring(cleanTheme.Name or ""), 24)
 		if label == "" then
 			label = "Custom " .. tostring(#skinNames() + 1)
 		end
 		if BUILTIN_SKINS[label] then
 			if typed == "" then
-				label = sanitizeString(label .. " copy", 24)
+				label = clean(label .. " copy", 24)
 			else
-				statusText("That name belongs to a built-in theme. Pick another.", true)
+				setStatusLabel("That name belongs to a built-in theme.", true)
 				return
 			end
 		end
-		local saved = registerSkin(label, clean)
+		local saved = registerSkin(label, cleanTheme)
 		if not saved then
-			statusText("Could not save that theme name.", true)
+			setStatusLabel("Could not save that theme name.", true)
 			return
 		end
-		saveCustomSkins()
 		preloadThemeImages(SKINS[saved])
 		applyTheme(SKINS[saved], true)
-		if PLAYER then
-			PLAYER:SetAttribute("BlossomSkin", saved)
-		end
-		if rebuildThemeChips then
-			rebuildThemeChips()
-		end
 		nameBox.Text = saved
-		local noteText = "Saved theme " .. saved .. "."
+		saveProfile()
+		if State.rebuildSkinChips then
+			State.rebuildSkinChips()
+		end
+		local message = "Saved skin " .. saved .. "."
 		if #notes > 0 then
-			noteText = noteText .. " " .. table.concat(notes, "; ")
+			message = message .. " " .. table.concat(notes, "; ")
 		end
-		statusText(noteText, false)
-		toast("Theme saved: " .. saved)
-	end))
-	trackConn(apply.Instance.MouseButton1Click:Connect(function()
-		local raw = JsonBox.Text
-		if CustomTab == "Theme" then
-			local data, decodeError = decodeJSON(raw)
-			if not data then
-				statusText(decodeError or "invalid JSON", true)
-				return
-			end
-			local clean, errors, notes = validateTheme(data)
-			if #errors > 0 then
-				statusText(table.concat(errors, "; "), true)
-				return
-			end
-			preloadThemeImages(clean)
-			applyTheme(clean, true)
-			local noteText = "Theme applied."
-			if #notes > 0 then
-				noteText = noteText .. " " .. table.concat(notes, "; ")
-			end
-			statusText(noteText, false)
-			toast("Theme applied")
-		else
-			local data, decodeError = decodeJSON(raw)
-			if not data then
-				statusText(decodeError or "invalid JSON", true)
-				return
-			end
-			local clean, errors, notes = validateConfig(data)
-			if #errors > 0 then
-				statusText(table.concat(errors, "; "), true)
-				return
-			end
-			for groupKey, groupValue in pairs(clean) do
-				if groupKey == "Theme" then
-					preloadThemeImages(groupValue)
-					applyTheme(groupValue, true)
-				else
-					CONFIG[groupKey] = groupValue
-				end
-			end
-			updateScale()
-			applyTheme(CURRENT_THEME, false)
-			local noteText = "Config applied."
-			if #notes > 0 then
-				noteText = noteText .. " " .. table.concat(notes, "; ")
-			end
-			statusText(noteText, false)
-			toast("Config applied")
-		end
-	end))
-	table.insert(REFRESH, refreshStatus)
-	table.insert(REFRESH, function()
-		box.BackgroundColor3 = TC.base
-		box.Font = themeFont()
+		setStatusLabel(message, false)
+		toast("Skin saved: " .. saved)
 	end)
+
+	export:Bind(function()
+		if State.customTab == "Theme" then
+			box.Text = themeToJSON(State.theme)
+			setStatusLabel("Active theme copied into the box.", false)
+		else
+			local ok, json = pcall(HttpService.JSONEncode, HttpService, {
+				Durations = CONFIG.Durations,
+				Easing = CONFIG.Easing,
+				Layout = CONFIG.Layout,
+			})
+			if ok then
+				box.Text = json
+				setStatusLabel("Active config copied into the box.", false)
+			else
+				setStatusLabel("Export failed.", true)
+			end
+		end
+	end)
+
+	reset:Bind(function()
+		if State.customTab == "Theme" then
+			applyTheme(SKINS.Sakura, true)
+			box.Text = themeToJSON(State.theme)
+			saveProfile()
+			if State.rebuildSkinChips then
+				State.rebuildSkinChips()
+			end
+			setStatusLabel("Reset to Sakura.", false)
+		else
+			setStatusLabel("Config reset: re-open the UI to reload defaults.", false)
+		end
+	end)
+
+	modal.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			closeCustomize()
+		end
+	end)
+
+	reportsStatus = function()
+		if State.statusLabel then
+			State.statusLabel.TextColor3 = Tokens.textSecondary
+		end
+	end
+	table.insert(REBUILD, function()
+		box.BackgroundColor3 = Tokens.base
+		box.TextColor3 = Tokens.textPrimary
+		box.Font = themeFont()
+		nameBox.BackgroundColor3 = Tokens.base
+		nameBox.TextColor3 = Tokens.textPrimary
+		nameBox.Font = themeFont()
+		if reportsStatus then
+			reportsStatus()
+		end
+	end)
+	setTab("Theme")
+end
+
+setStatusLabel = function(message, isError)
+	if not State.statusLabel then
+		return
+	end
+	State.statusLabel.Text = clean(tostring(message or ""), 400)
+	State.statusLabel.TextColor3 = isError and Color3.fromRGB(255, 132, 132) or Tokens.textSecondary
+end
+
+openCustomize = function(tab)
+	if not State.customize then
+		return
+	end
+	State.customizeOpen = true
+	State.customize.Visible = not State.userHidden
+	if State.setCustomTab then
+		State.setCustomTab(tab or "Theme")
+	end
+	local modal = State.customize:FindFirstChild("Modal")
+	if modal then
+		modal.BackgroundTransparency = 0.9
+		playTween(modal, ti(duration(CONFIG.Durations.Fade), "Quad", "Out"), {
+			BackgroundTransparency = State.theme.DimTransparency,
+		})
+	end
+	applyVisibility()
+end
+
+closeCustomize = function()
+	State.customizeOpen = false
+	if not State.customize then
+		return
+	end
+	local modal = State.customize:FindFirstChild("Modal")
+	if modal then
+		playTween(modal, ti(duration(CONFIG.Durations.Fade) * 0.8, "Quad", "In"), { BackgroundTransparency = 1 })
+	end
+	task.delay(duration(CONFIG.Durations.Fade) * 0.8 + 0.02, function()
+		if not State.destroyed and not State.customizeOpen and State.customize then
+			State.customize.Visible = false
+		end
+	end)
+	if State.userHidden and State.customize then
+		State.customize.Visible = false
+	end
+end
+
+local function clearStage()
+	if not State.stage then
+		return
+	end
+	cancelList(StageTweens)
+	cancelList(PetalTweens)
+	for i = #StageConnections, 1, -1 do
+		pcall(function()
+			StageConnections[i]:Disconnect()
+		end)
+		table.remove(StageConnections, i)
+	end
+	for _, child in ipairs(State.stage:GetChildren()) do
+		child:Destroy()
+	end
+	ThemeCache.list = nil
+end
+
+local function waitToken(seconds, token)
+	local deadline = os.clock() + seconds
+	while os.clock() < deadline do
+		if State.destroyed or State.token ~= token then
+			return false
+		end
+		task.wait(0.03)
+	end
+	return not State.destroyed and State.token == token
+end
+
+local function ambientPetals(parent, count, span, transparency)
+	if Device.mobile and CONFIG.Mobile.ReduceEffects then
+		return
+	end
+	if not CONFIG.Ambient.Petals then
+		return
+	end
+	count = math.floor(clamp(tonumber(count) or CONFIG.Ambient.Count, 0, 20))
+	local tint = hex(CONFIG.Loading.PetalColor)
+	for _ = 1, count do
+		local width = 6 + math.random() * 5
+		local petal = new("Frame", {
+			Name = "Petal",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(math.random(), 0, 0, -40),
+			Size = UDim2.new(0, width, 0, width * 1.4),
+			Rotation = math.random() * 360,
+			BackgroundColor3 = tint,
+			BackgroundTransparency = transparency + math.random() * 0.2,
+			BorderSizePixel = 0,
+			ZIndex = 1,
+		}, parent)
+		new("UICorner", { CornerRadius = UDim.new(0.5, 0), Role = "Dot" }, petal)
+		local fallTime = span / clamp(CONFIG.Ambient.Speed, 20, 200) + math.random() * 1.2
+		playTween(petal, ti(fallTime, "Linear", "Out", -1, false, math.random() * fallTime), {
+			Position = UDim2.new(petal.Position.X.Scale, 0, 1, -40),
+		}, PetalTweens)
+		playTween(petal, ti(fallTime * 1.5, "Linear", "Out", -1), { Rotation = petal.Rotation + 220 }, PetalTweens)
+	end
+end
+
+local function loaderSplash()
+	local vp = viewport()
+	local width = math.min(vp.X - 32, 260)
+	local orange = new("CanvasGroup", {
+		Name = "Splash",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.new(0, width, 0, 64),
+		BackgroundTransparency = 1,
+		GroupTransparency = 1,
+		ZIndex = 4,
+	}, State.stage)
+	ambientPetals(State.stage, CONFIG.Ambient.Count, vp.Y, 0.35)
+	makeLabel(orange, {
+		Name = "Title",
+		Text = clean(CONFIG.Brand.Name, 24),
+		Tier = "Primary",
+		TextRole = "Title",
+		Color = hex(CONFIG.Loading.TitleColor),
+		Bold = true,
+		FixedSize = true,
+		TextSize = 17,
+		Position = UDim2.new(0, 0, 0, 0),
+		Size = UDim2.new(1, 0, 0, 24),
+		XAlign = Enum.TextXAlignment.Center,
+		ZIndex = 3,
+	})
+	local bar = new("Frame", {
+		Name = "Progress",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 34),
+		Size = UDim2.new(0, 120, 0, 2),
+		BackgroundColor3 = Tokens.track,
+		BorderSizePixel = 0,
+		Role = "Track",
+		ZIndex = 3,
+	}, orange)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, bar)
+	local fill = new("Frame", {
+		Name = "Fill",
+		Size = UDim2.new(0, 0, 1, 0),
+		BackgroundColor3 = Tokens.accent,
+		BorderSizePixel = 0,
+		Role = "Fill",
+		ZIndex = 4,
+	}, bar)
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, fill)
+	playTween(fill, ti(duration(CONFIG.Durations.Splash), "Quint", "Out"), { Size = UDim2.new(1, 0, 1, 0) }, StageTweens)
+	local inTime = duration(CONFIG.Durations.Splash) * 0.4
+	local outTime = duration(CONFIG.Durations.Splash) * 0.35
+	playTween(orange, ti(inTime, CONFIG.Easing.Fade, CONFIG.Easing.FadeDir), { GroupTransparency = 0 })
+	local hold = duration(CONFIG.Durations.SplashHold)
+	task.delay(inTime + hold, function()
+		if State.destroyed then
+			return
+		end
+		playTween(orange, ti(outTime, CONFIG.Easing.Fade, "In"), { GroupTransparency = 1 })
+	end)
+	return inTime + hold + outTime
+end
+
+local function setLoading(active)
+	State.loading = active == true
+	manageBlur()
+end
+
+local function abortLoader(showMenu)
+	State.token = State.token + 1
+	State.playing = false
+	State.activeSpeed = 1
+	clearStage()
+	setLoading(false)
+	if showMenu then
+		showMain(false)
+		setBackdrop("main")
+	end
+end
+
+playGallery = function()
+	if State.destroyed then
+		return
+	end
+	if State.playing then
+		abortLoader(true)
+	end
+	State.playing = true
+	State.token = State.token + 1
+	local token = State.token
+	State.activeSpeed = State.speed
+	local restore = State.mainVisible
+	hideMain(true)
+	setLoading(true)
+	setBackdrop("loading")
+
+	if CONFIG.Gallery.CountdownEnabled and State.countdown then
+		for i = 3, 1, -1 do
+			if State.destroyed or State.token ~= token then
+				abortLoader(true)
+				return
+			end
+			State.countdown.Text = tostring(i)
+			playTween(State.countdown, ti(duration(0.16), "Quad", "Out"), { TextTransparency = 0 })
+			if not waitToken(duration(CONFIG.Durations.Countdown), token) then
+				return
+			end
+			playTween(State.countdown, ti(duration(0.16), "Quad", "In"), { TextTransparency = 1 })
+			if not waitToken(duration(CONFIG.Durations.CountdownGap), token) then
+				return
+			end
+		end
+	end
+	if State.destroyed or State.token ~= token then
+		return
+	end
+	local total = 2
+	local ok, result = safeCall(loaderSplash)
+	if ok then
+		total = tonumber(result) or 2
+	else
+		warn("[Blossom] loader failed: " .. tostring(result))
+	end
+	local finished = waitToken(math.max(0.2, total) + 0.05, token)
+	if not finished and (State.destroyed or State.token ~= token) then
+		return
+	end
+	clearStage()
+	State.playing = false
+	State.activeSpeed = 1
+	if State.destroyed then
+		return
+	end
+	if restore then
+		showMain(true)
+	else
+		setLoading(false)
+		setBackdrop("main")
+	end
+	applyVisibility()
+	if token == State.token and CONFIG.Gallery.LoopEnabled then
+		task.delay(duration(CONFIG.Durations.LoopGap), function()
+			if not State.destroyed and not State.playing then
+				playGallery()
+			end
+		end)
+	end
+end
+
+captureShot = function()
+	local ok = pcall(function()
+		CaptureService:CaptureScreenshot()
+	end)
+	if not ok then
+		toast("Capture failed", true)
+		return
+	end
+	if State.flash then
+		State.flash.Visible = true
+		State.flash.BackgroundTransparency = 0.55
+		playTween(State.flash, ti(duration(CONFIG.Durations.Fade), "Quad", "In"), { BackgroundTransparency = 1 })
+		task.delay(duration(CONFIG.Durations.Fade) + 0.05, function()
+			if State.flash then
+				State.flash.Visible = false
+			end
+		end)
+	end
+	toast("Screenshot saved")
 end
 
 toggleDebug = function()
-	DebugState.visible = not DebugState.visible
-	if DebugFrame then
-		DebugFrame.Visible = DebugState.visible
+	State.debugVisible = not State.debugVisible
+	if State.debugFrame then
+		State.debugFrame.Visible = State.debugVisible and not State.userHidden
 	end
-	if DebugState.visible then
-		if DebugState.conn then
+	if State.debugVisible then
+		if State.debugConn then
 			return
 		end
-		DebugState.clock = 0
-		DebugState.frames = 0
-		DebugState.conn = RunService.RenderStepped:Connect(function(dt)
-			DebugState.clock = DebugState.clock + dt
-			DebugState.frames = DebugState.frames + 1
-			if DebugState.clock < CONFIG.Debug.UpdateRate then
+		local clock, frames = 0, 0
+		State.debugConn = RunService.RenderStepped:Connect(function(dt)
+			clock = clock + dt
+			frames = frames + 1
+			if clock < CONFIG.Debug.UpdateRate then
 				return
 			end
-			DebugState.fps = math.floor(DebugState.frames / math.max(DebugState.clock, 0.0001) + 0.5)
-			DebugState.clock = 0
-			DebugState.frames = 0
-			if not DebugFrame then
-				return
+			local fps = math.floor(frames / math.max(clock, 0.0001) + 0.5)
+			clock, frames = 0, 0
+			if State.debugLabel then
+				State.debugLabel.Text = string.format("fps %d  ·  ms %.1f\ninstances %d", fps, 1000 / math.max(fps, 1), State.gui and #State.gui:GetDescendants() or 0)
 			end
-			local lines = DebugFrame:FindFirstChild("Lines")
-			if not lines then
-				return
-			end
-			local ms = 1000 / math.max(DebugState.fps, 1)
-			DebugState.instClock = DebugState.instClock + CONFIG.Debug.UpdateRate
-			if DebugState.instClock >= 1 or not DebugState.instances then
-				DebugState.instClock = 0
-				DebugState.instances = Gui and #Gui:GetDescendants() or 0
-			end
-			lines.Text = string.format("fps %d   ms %.1f\ninstances %d", DebugState.fps, ms, DebugState.instances)
 		end)
-	elseif DebugState.conn then
+	elseif State.debugConn then
 		pcall(function()
-			DebugState.conn:Disconnect()
+			State.debugConn:Disconnect()
 		end)
-		DebugState.conn = nil
+		State.debugConn = nil
 	end
 end
 
 local function buildDebug()
-	DebugFrame = new("Frame", {
+	local frame = new("Frame", {
 		Name = "Debug",
-		AnchorPoint = Vector2.new(0, 0),
 		Position = UDim2.new(0, 12, 0, 12),
-		Size = UDim2.new(0, 208, 0, 72),
-		BackgroundColor3 = TC.card,
+		Size = UDim2.new(0, 196, 0, 62),
+		BackgroundColor3 = Tokens.card,
 		BackgroundTransparency = 0.06,
 		BorderSizePixel = 0,
-		Visible = CONFIG.Debug.StartVisible,
+		Visible = false,
 		Role = "Card",
 		ZIndex = 12,
-	}, Root)
-	new("UICorner", { CornerRadius = UDim.new(0, CONFIG.Layout.SmallCornerRadius), Role = "Small" }, DebugFrame)
-	new("UIPadding", { PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, DebugFrame)
-	makeLabel({
-		Name = "Lines",
-		Text = "fps 0   ms 0.0\ninstances 0",
+	}, State.root)
+	new("UICorner", { CornerRadius = UDim.new(0, 8), Role = "Small" }, frame)
+	new("UIPadding", {
+		PaddingTop = UDim.new(0, 8),
+		PaddingBottom = UDim.new(0, 8),
+		PaddingLeft = UDim.new(0, 10),
+		PaddingRight = UDim.new(0, 10),
+	}, frame)
+	State.debugLabel = makeLabel(frame, {
+		Text = "fps 0  ·  ms 0.0",
 		Tier = "Secondary",
 		TextRole = "Caption",
 		Size = UDim2.fromScale(1, 1),
-		TextYAlignment = Enum.TextYAlignment.Top,
-		TextWrapped = false,
-	}, DebugFrame)
-	DebugState.visible = false
+		YAlign = Enum.TextYAlignment.Top,
+	})
+	State.debugFrame = frame
+	State.debugVisible = false
+	State.debugConn = nil
 	if CONFIG.Debug.StartVisible then
 		toggleDebug()
 	end
 end
 
+applyVisibility = function()
+	if State.main then
+		State.main.Visible = State.mainVisible and not State.userHidden
+	end
+	if State.customize then
+		State.customize.Visible = State.customizeOpen and not State.userHidden
+	end
+	if State.debugFrame then
+		State.debugFrame.Visible = State.debugVisible and not State.userHidden
+	end
+end
+
+local function toggleMenu()
+	if State.playing then
+		return
+	end
+	State.userHidden = not State.userHidden
+	applyVisibility()
+	toast(State.userHidden and "Menu hidden" or "Menu shown")
+end
+
+local function handleInput(input)
+	if State.destroyed or not State.ready then
+		return
+	end
+	if UserInputService:GetFocusedTextBox() then
+		return
+	end
+	local keys = CONFIG.Keys
+	if input.KeyCode == keys.Destroy and UserInputService:IsKeyDown(keys.DestroyModifier) then
+		Blossom.Destroy()
+	elseif input.KeyCode == keys.Debug then
+		toggleDebug()
+	elseif input.KeyCode == keys.Screenshot then
+		captureShot()
+	elseif input.KeyCode == keys.Hide then
+		toggleMenu()
+	end
+end
+
 local function buildGui()
-	Gui = new("ScreenGui", {
+	computeMetrics()
+	local gui = new("ScreenGui", {
 		Name = CONFIG.GuiName,
 		ResetOnSpawn = false,
 		IgnoreGuiInset = true,
 		DisplayOrder = 60,
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 		Enabled = true,
-	}, PLAYER_GUI)
-	Gui:SetAttribute("Building", true)
-	local protectGui = SkinStore.fn("protect_gui")
-	if protectGui then
-		pcall(protectGui, Gui)
+	}, State.playerGui)
+	State.gui = gui
+	gui:SetAttribute("Building", true)
+	local protect = executorFunction("protect_gui")
+	if protect then
+		pcall(protect, gui)
 	end
 	pcall(function()
-		if CONFIG.Layout.SafeArea == false then
-			Gui.ScreenInsets = Enum.ScreenInsets.None
-		else
-			Gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
-		end
+		gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 	end)
-	Root = new("Frame", {
+	State.root = new("Frame", {
 		Name = "Root",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ClipsDescendants = false,
-	}, Gui)
-	RootScale = new("UIScale", { Scale = 1 }, Root)
-	Backdrop = new("Frame", {
+	}, gui)
+	State.rootScale = new("UIScale", { Scale = 1 }, State.root)
+	State.backdrop = new("Frame", {
 		Name = "Backdrop",
 		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = TC.dim,
+		BackgroundColor3 = Tokens.dim,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		Visible = false,
 		Role = "Backdrop",
 		ZIndex = 1,
-	}, Root)
-	if CONFIG.Loading.LogoMode == "Image" and CONFIG.Loading.LogoImageId ~= "" then
-		local logoSize = clampNum(math.floor(tonumber(CONFIG.Loading.LogoSize) or 72), 24, 320)
-		local offsetY = tonumber(CONFIG.Loading.LogoOffsetY) or -110
-		LoadingLogo = new("Frame", {
-			Name = "LoadingLogo",
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.new(0.5, 0, 0.5, offsetY),
-			Size = UDim2.new(0, logoSize, 0, logoSize),
-			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-			Visible = false,
-			ZIndex = 2,
-		}, Backdrop)
-		LoadingRotor = new("Frame", {
-			Name = "Rotor",
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.5),
-			Size = UDim2.fromScale(1, 1),
-			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-		}, LoadingLogo)
-		if CONFIG.Loading.LogoMode == "Image" and CONFIG.Loading.LogoImageId ~= "" then
-			local mark = new("ImageLabel", {
-				Name = "Mark",
-				Size = UDim2.fromScale(1, 1),
-				BackgroundTransparency = 1,
-				Image = "rbxassetid://" .. tostring(CONFIG.Loading.LogoImageId):gsub("%D", ""),
-				ScaleType = Enum.ScaleType.Crop,
-			}, LoadingRotor)
-			new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, mark)
-			new("UIStroke", { Color = hexToColor(CONFIG.Loading.LogoColor), Transparency = 0.4, Thickness = 2, Role = "Accent" }, mark)
-		else
-			local ring = new("Frame", {
-				Name = "Ring",
-				Size = UDim2.fromScale(1, 1),
-				BackgroundTransparency = 1,
-				BorderSizePixel = 0,
-			}, LoadingRotor)
-			new("UICorner", { CornerRadius = UDim.new(1, 0), Role = "Dot" }, ring)
-			local ringStroke = new("UIStroke", { Color = hexToColor(CONFIG.Loading.LogoColor), Transparency = 0.2, Thickness = 3 }, ring)
-			local dotColor = hexToColor(CONFIG.Loading.LogoColor)
-			for _, dotPos in ipairs({ UDim2.fromScale(0.5, 0.06), UDim2.fromScale(0.88, 0.72), UDim2.fromScale(0.12, 0.72) }) do
-				new("Frame", {
-					Name = "Dot",
-					AnchorPoint = Vector2.new(0.5, 0.5),
-					Position = dotPos,
-					Size = UDim2.fromScale(0.15, 0.15),
-					BackgroundColor3 = dotColor,
-					BorderSizePixel = 0,
-				}, LoadingRotor)
-			end
-			new("Frame", {
-				Name = "Core",
-				AnchorPoint = Vector2.new(0.5, 0.5),
-				Position = UDim2.fromScale(0.5, 0.5),
-				Size = UDim2.fromScale(0.3, 0.3),
-				BackgroundColor3 = hexToColor(CONFIG.Loading.LogoCoreColor),
-				BackgroundTransparency = 0.1,
-				BorderSizePixel = 0,
-			}, LoadingRotor)
-			table.insert(REFRESH, function()
-				if not LoadingRotor or not LoadingRotor.Parent then
-					return
-				end
-				ringStroke.Color = hexToColor(CONFIG.Loading.LogoColor)
-				ringStroke.Transparency = 0.2
-				ringStroke.Thickness = 3
-				for _, child in ipairs(LoadingRotor:GetChildren()) do
-					if child.Name == "Dot" then
-						child.BackgroundColor3 = hexToColor(CONFIG.Loading.LogoColor)
-					elseif child.Name == "Core" then
-						child.BackgroundColor3 = hexToColor(CONFIG.Loading.LogoCoreColor)
-					end
-				end
-			end)
-		end
-	end
-	Stage = new("Frame", {
+	}, State.root)
+	State.stage = new("Frame", {
 		Name = "Stage",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ZIndex = 2,
-	}, Root)
-	FlashFrame = new("Frame", {
+	}, State.root)
+	State.flash = new("Frame", {
 		Name = "Flash",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundColor3 = Color3.new(1, 1, 1),
@@ -4598,340 +4548,33 @@ local function buildGui()
 		BorderSizePixel = 0,
 		Visible = false,
 		ZIndex = 20,
-	}, Root)
-	CountdownLabel = new("TextLabel", {
+	}, State.root)
+	State.countdown = new("TextLabel", {
 		Name = "Countdown",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		Text = "",
 		Font = boldFont(),
-		TextSize = 64,
-		TextColor3 = TC.textPrimary,
+		TextSize = 72,
+		TextColor3 = Tokens.textPrimary,
 		TextTransparency = 1,
-		TextWrapped = false,
 		ZIndex = 14,
-	}, Root)
-	CountdownLabel:SetAttribute("Bold", true)
-	CountdownLabel:SetAttribute("FixedSize", true)
-	ToastGroup = new("CanvasGroup", {
-		Name = "Toast",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -16, 0, 16),
-		Size = UDim2.new(0, 268, 0, 42),
-		BackgroundTransparency = 1,
-		GroupTransparency = 1,
-		Visible = false,
-		ZIndex = 16,
-	}, Root)
-	new("UISizeConstraint", { MaxSize = Vector2.new(300, 64) }, ToastGroup)
-	local toastCard = new("Frame", {
-		Name = "Card",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = TC.card,
-		BackgroundTransparency = 0,
-		BorderSizePixel = 0,
-		Role = "Card",
-	}, ToastGroup)
-	new("UICorner", { CornerRadius = UDim.new(0, CONFIG.Layout.SmallCornerRadius), Role = "Small" }, toastCard)
-	new("UIStroke", { Color = Color3.new(1, 1, 1), Transparency = CURRENT_THEME.StrokeTransparency, Thickness = 1, Role = "Edge" }, toastCard)
-	ToastStripe = new("Frame", {
-		Name = "Stripe",
-		Size = UDim2.new(0, 2, 1, 0),
-		BackgroundColor3 = TC.accent,
-		BackgroundTransparency = 0,
-		BorderSizePixel = 0,
-		Role = "Accent",
-		ZIndex = 2,
-	}, ToastGroup)
-	new("UICorner", { CornerRadius = UDim.new(0, 2), Role = "Small" }, ToastStripe)
-	ToastLabel = new("TextLabel", {
-		Name = "Text",
-		Position = UDim2.new(0, 15, 0, 0),
-		Size = UDim2.new(1, -25, 1, 0),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Text = "",
-		Font = themeFont(),
-		TextSize = CONFIG.Layout.CaptionSize + 1,
-		TextColor3 = TC.textPrimary,
-		TextWrapped = true,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Tier = "Primary",
-		TextRole = "Caption",
-	}, ToastGroup)
-	updateScale()
-	task.wait()
-	if DESTROYED then
-		return
-	end
+	}, State.root)
+	State.countdown:SetAttribute("Bold", true)
+	State.countdown:SetAttribute("FixedSize", true)
+	buildToast(State.root)
 	buildMain()
-	task.wait()
-	if DESTROYED then
-		return
-	end
 	buildCustomize()
-	task.wait()
-	if DESTROYED then
-		return
-	end
 	buildDebug()
-	Gui:SetAttribute("Building", false)
-end
-local destroyAll
-local UserHidden = false
-local CustomizeOpen = false
-
-local function applyControlVisibility()
-	if Main then
-		Main.Visible = MainVisible and not UserHidden
-	end
-	if Customize then
-		Customize.Visible = CustomizeOpen and not UserHidden
-	end
-end
-
-local function hideControls()
-	if Main then
-		Main.Visible = false
-	end
-	if Customize then
-		Customize.Visible = false
-	end
-end
-
-local function toggleMenuVisibility()
-	if PLAYING then
-		return
-	end
-	UserHidden = not UserHidden
-	if UserHidden then
-		hideMain(false)
-		if Customize then
-			Customize.Visible = false
-		end
-	elseif MainVisible then
-		Main.Visible = true
-		if Customize and CustomizeOpen then
-			Customize.Visible = true
-		end
-	else
-		showMain(true)
-	end
-	toast(UserHidden and "Menu hidden" or "Menu shown")
-end
-
-local function waitCancel(seconds, token)
-	local deadline = os.clock() + seconds
-	while os.clock() < deadline do
-		if DESTROYED or TOKEN ~= token then
-			return false
-		end
-		task.wait(0.05)
-	end
-	return not DESTROYED and TOKEN == token
-end
-
-openCustomize = function()
-	if not Customize then
-		return
-	end
-	CustomizeOpen = true
-	Customize.Visible = not UserHidden
-	local modal = Customize:FindFirstChild("Modal")
-	local panel = Customize:FindFirstChild("Panel")
-	local scale = panel and panel:FindFirstChildOfClass("UIScale")
-	if panel and not scale then
-		scale = new("UIScale", { Scale = 0.96 }, panel)
-	end
-	if QUALITY.Instant then
-		if scale then
-			scale.Scale = 1
-		end
-		if modal then
-			modal.BackgroundTransparency = CURRENT_THEME.DimTransparency
-		end
-		return
-	end
-	if modal then
-		modal.BackgroundTransparency = 0.9
-		playTween(modal, ti(mdur(CONFIG.Durations.Fade), CONFIG.Easing.Fade, "Out"), { BackgroundTransparency = CURRENT_THEME.DimTransparency })
-	end
-	if scale then
-		scale.Scale = 0.96
-		playTween(scale, ti(mdur(CONFIG.Durations.Transition), "Quint", "Out"), { Scale = 1 })
-	end
-end
-
-closeCustomize = function()
-	CustomizeOpen = false
-	if not Customize then
-		return
-	end
-	local modal = Customize:FindFirstChild("Modal")
-	local panel = Customize:FindFirstChild("Panel")
-	local scale = panel and panel:FindFirstChildOfClass("UIScale")
-	if QUALITY.Instant or not modal then
-		Customize.Visible = false
-		return
-	end
-	playTween(modal, ti(mdur(CONFIG.Durations.Fade) * 0.8, "Quad", "In"), { BackgroundTransparency = 1 })
-	if scale then
-		playTween(scale, ti(mdur(CONFIG.Durations.Fade) * 0.8, "Quad", "In"), { Scale = 0.97 })
-	end
-	local waitTime = mdur(CONFIG.Durations.Fade) * 0.8 + 0.02
-	task.delay(waitTime, function()
-		if DESTROYED or not Customize then
-			return
-		end
-		if not CustomizeOpen then
-			Customize.Visible = false
-		end
-	end)
-end
-
-applyConfigNow = function()
-	updateScale()
-	applyTheme(CURRENT_THEME, false)
-	toast("Config re-read")
-	if not PLAYING then
-		playGallery()
-	end
-end
-
-local function abortLoader(showMenu)
-	TOKEN = TOKEN + 1
-	PLAYING = false
-	ACTIVE_SPEED = 1
-	clearStage()
-	setLoading(false)
-	if showMenu and not DESTROYED then
-		if not MainVisible then
-			showMain(false)
-		end
-		setBackdrop("main")
-	end
-	applyControlVisibility()
-end
-
-playGallery = function()
-	if DESTROYED then
-		return
-	end
-	if PLAYING then
-		abortLoader(true)
-	end
-	PLAYING = true
-	TOKEN = TOKEN + 1
-	local token = TOKEN
-	ACTIVE_SPEED = GalleryState.speed
-	hideControls()
-
-	local function runCountdown()
-		if not GalleryState.countdown or not CountdownLabel then
-			return true
-		end
-		for i = 3, 1, -1 do
-			if DESTROYED or TOKEN ~= token then
-				return false
-			end
-			CountdownLabel.Text = tostring(i)
-			playTween(CountdownLabel, ti(dur(0.16), "Quad", "Out"), { TextTransparency = 0 })
-			if not waitCancel(dur(CONFIG.Durations.Countdown), token) then
-				return false
-			end
-			playTween(CountdownLabel, ti(dur(0.16), "Quad", "In"), { TextTransparency = 1 })
-			if not waitCancel(dur(CONFIG.Durations.CountdownGap), token) then
-				return false
-			end
-		end
-		return TOKEN == token
-	end
-
-	if not runCountdown() then
-		abortLoader(true)
-		return
-	end
-
-	Stage.Visible = true
-	Backdrop.Visible = true
-	setLoading(true)
-	setBackdrop("loading")
-
-	local restoreMain = MainVisible
-	if restoreMain then
-		hideMain(true)
-	end
-
-	local launched, result = pcall(loaderSplash)
-	if not launched then
-		warn("Blossom loader failed: " .. tostring(result))
-		toast("Loader reset", true)
-		abortLoader(true)
-		return
-	end
-	local total = tonumber(result) or 2
-	if total < 0.2 then
-		total = 0.2
-	end
-	task.delay(total + 2, function()
-		if not DESTROYED and PLAYING and TOKEN == token then
-			warn("Blossom loader watchdog reset")
-			abortLoader(true)
-		end
-	end)
-
-	waitCancel(total + 0.1, token)
-	clearStage()
-	PLAYING = false
-	ACTIVE_SPEED = 1
-	if DESTROYED then
-		return
-	end
-	if restoreMain and not MainVisible then
-		showMain(true)
-	else
-		setLoading(false)
-		setBackdrop("main")
-	end
-	applyControlVisibility()
-	if token == TOKEN and GalleryState.loop then
-		later(dur(CONFIG.Durations.LoopGap), function()
-			playGallery()
-		end)
-	end
-end
-
-local function handleInput(input)
-	if DESTROYED or (Gui and Gui:GetAttribute("Building") == true) then
-		return
-	end
-	if input.KeyCode == CONFIG.DestroyKey and UserInputService:IsKeyDown(CONFIG.DestroyModifier) then
-		destroyAll()
-	elseif input.KeyCode == CONFIG.DebugKey then
-		toggleDebug()
-	elseif input.KeyCode == CONFIG.ScreenshotKey then
-		captureShot()
-	elseif input.KeyCode == CONFIG.HideKey and not UserInputService:GetFocusedTextBox() then
-		toggleMenuVisibility()
-	end
-end
-
-local function activeSkinName()
-	if PLAYER then
-		local stored = PLAYER:GetAttribute("BlossomSkin")
-		if type(stored) == "string" and SKINS[stored] then
-			return stored
-		end
-	end
-	return "Sakura"
+	gui:SetAttribute("Building", false)
 end
 
 local function destroyGuiCopies()
-	local hosts = { PLAYER_GUI }
-	if PLAYER then
-		local pg = PLAYER:FindFirstChild("PlayerGui")
-		if pg and pg ~= PLAYER_GUI then
-			table.insert(hosts, pg)
+	local hosts = { State.playerGui }
+	if State.player then
+		local playerGui = State.player:FindFirstChild("PlayerGui")
+		if playerGui and playerGui ~= State.playerGui then
+			table.insert(hosts, playerGui)
 		end
 	end
 	for _, host in ipairs(hosts) do
@@ -4947,36 +4590,34 @@ local function destroyGuiCopies()
 	end
 end
 
-
-
 local function getEnvironment()
-	local plr = Players.LocalPlayer
-	if not plr then
-		plr = Players.PlayerAdded:Wait()
+	local player = Players.LocalPlayer
+	if not player then
+		player = Players.PlayerAdded:Wait()
 	end
-	local pg = plr:WaitForChild("PlayerGui", 15)
-	if not pg then
+	local playerGui = player:WaitForChild("PlayerGui", 15)
+	if not playerGui then
 		error("PlayerGui did not load in time")
 	end
 	if not game:IsLoaded() then
-		local done = false
-		local loaded = game.Loaded:Connect(function()
-			done = true
+		local loaded = false
+		local conn = game.Loaded:Connect(function()
+			loaded = true
 		end)
 		local started = os.clock()
-		while not done and os.clock() - started < 20 do
+		while not loaded and os.clock() - started < 20 do
 			task.wait(0.1)
 		end
-		loaded:Disconnect()
+		conn:Disconnect()
 	end
-	local gethui = SkinStore.fn("gethui")
+	local gethui = executorFunction("gethui")
 	if gethui then
-		local okHidden, hidden = pcall(gethui)
-		if okHidden and typeof(hidden) == "Instance" then
-			return plr, hidden
+		local ok, hidden = pcall(gethui)
+		if ok and typeof(hidden) == "Instance" then
+			return player, hidden
 		end
 	end
-	return plr, pg
+	return player, playerGui
 end
 
 local function showFatal(message)
@@ -4986,23 +4627,16 @@ local function showFatal(message)
 		gui.ResetOnSpawn = false
 		gui.IgnoreGuiInset = true
 		gui.DisplayOrder = 100
-		gui.Parent = PLAYER_GUI
+		gui.Parent = State.playerGui
 		local frame = Instance.new("Frame")
 		frame.AnchorPoint = Vector2.new(0.5, 0)
 		frame.Position = UDim2.new(0.5, 0, 0, 24)
 		frame.Size = UDim2.new(0, 400, 0, 104)
 		frame.BackgroundColor3 = Color3.fromRGB(30, 14, 16)
-		frame.BackgroundTransparency = 0.12
-		frame.BorderSizePixel = 0
 		frame.Parent = gui
 		local corner = Instance.new("UICorner")
 		corner.CornerRadius = UDim.new(0, 10)
 		corner.Parent = frame
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = Color3.fromRGB(255, 120, 120)
-		stroke.Transparency = 0.5
-		stroke.Thickness = 1
-		stroke.Parent = frame
 		local label = Instance.new("TextLabel")
 		label.Position = UDim2.new(0, 12, 0, 10)
 		label.Size = UDim2.new(1, -24, 1, -20)
@@ -5013,164 +4647,225 @@ local function showFatal(message)
 		label.TextXAlignment = Enum.TextXAlignment.Left
 		label.TextYAlignment = Enum.TextYAlignment.Top
 		label.TextWrapped = true
-		label.Text = "Blossom failed to start:\n" .. sanitizeString(tostring(message), 500)
+		label.Text = "Blossom failed to start:\n" .. clean(tostring(message), 500)
 		label.Parent = frame
 	end)
 end
 
+local function registerBuiltins()
+	Blossom.RegisterModule({
+		Id = "animation",
+		Title = "Animation",
+		Subtitle = "timing",
+		Icon = "diamond",
+		Priority = 20,
+		Controls = {
+			{ Type = "Slider", Label = "Duration scale", Min = 0.25, Max = 2, Step = 0.05, Value = CONFIG.Durations.Scale, OnChange = function(value)
+				CONFIG.Durations.Scale = value
+			end },
+			{ Type = "Slider", Label = "Hover time", Min = 0.04, Max = 0.6, Step = 0.02, Value = CONFIG.Durations.Hover, OnChange = function(value)
+				CONFIG.Durations.Hover = value
+			end },
+			{ Type = "Button", Text = "Replay loader", Variant = "Primary", OnClick = function(api)
+				api.Toast("Playing loader")
+				playGallery()
+			end },
+		},
+	})
+	Blossom.RegisterModule({
+		Id = "capture",
+		Title = "Capture",
+		Subtitle = "screenshots",
+		Icon = "camera",
+		Priority = 60,
+		Controls = {
+			{ Type = "Button", Text = "Save screenshot", OnClick = function()
+				captureShot()
+			end },
+			{ Type = "Button", Text = "Toggle debug overlay", OnClick = function()
+				toggleDebug()
+			end },
+		},
+	})
+	Blossom.RegisterModule({
+		Id = "interface",
+		Title = "Interface",
+		Subtitle = "notifications",
+		Icon = "sliders",
+		Priority = 70,
+		Controls = {
+			{ Type = "Input", Label = "Status message", Placeholder = "Type and press Enter", OnSubmit = function(text, api)
+				api.Toast(text ~= "" and text or "Hello from a module")
+			end },
+		},
+	})
+end
+
 local function runStartup()
-	Stage.Visible = true
-	Backdrop.Visible = true
-	Backdrop.BackgroundTransparency = 1
 	setLoading(true)
 	setBackdrop("loading")
-	PLAYING = true
-	TOKEN = TOKEN + 1
-	local token = TOKEN
-	ACTIVE_SPEED = 1
+	State.token = State.token + 1
+	local token = State.token
 	if CONFIG.AutoPlay then
-		local ok, err = pcall(function()
-			waitCancel(CONFIG.StartupDelay, token)
-			if token ~= TOKEN then
+		safeCall(function()
+			waitToken(CONFIG.StartupDelay, token)
+			if State.token ~= token then
 				return
 			end
 			local total = loaderSplash()
-			waitCancel(total + 0.05, token)
-			clearStage()
+			waitToken((tonumber(total) or 2) + 0.05, token)
 		end)
-		if not ok then
-			warn("Blossom startup animation failed: " .. tostring(err))
-		end
 	end
-	clearStage()
-	if token == TOKEN then
+	if State.token == token then
+		clearStage()
 		setLoading(false)
-		if not MainVisible then
-			showMain(true)
-		end
+		showMain(true)
 		setBackdrop("main")
-		PLAYING = false
-		applyControlVisibility()
 	end
 end
 
+local destroyAll
+
 local function main()
-	PLAYER, PLAYER_GUI = getEnvironment()
-	local previous = _G["BlossomDestroy"]
-	if typeof(previous) == "function" then
-		pcall(previous)
+	State.player, State.playerGui = getEnvironment()
+	if type(_G.BlossomDestroy) == "function" then
+		pcall(_G.BlossomDestroy)
 	end
 	destroyGuiCopies()
-	_G["BlossomDestroy"] = destroyAll
-	loadCustomSkins()
-	local skinName = activeSkinName()
-	CURRENT_THEME = copyTable(SKINS[skinName] or SKINS["Sakura"])
-	recomputeColors(CURRENT_THEME)
-	trackConn(UserInputService.InputBegan:Connect(handleInput))
+	_G.BlossomDestroy = destroyAll
+	_G.Blossom = Blossom
+	loadProfile()
+	local skin = State.profileSkin
+	if not skin or not SKINS[skin] then
+		skin = "Sakura"
+	end
+	State.theme = copy(SKINS[skin] or SKINS.Sakura)
+	recalcTokens(State.theme)
+	connect(UserInputService.InputBegan, handleInput)
 	local camera = workspace.CurrentCamera
 	if camera then
-		local resizePending = false
-		trackConn(camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-			if resizePending then
+		local pending = false
+		connect(camera:GetPropertyChangedSignal("ViewportSize"), function()
+			if pending then
 				return
 			end
-			resizePending = true
-			task.delay(0.08, function()
-				resizePending = false
-				if not DESTROYED then
-					updateScale()
+			pending = true
+			task.delay(0.1, function()
+				pending = false
+				if not State.destroyed then
+					updateLayout()
 				end
 			end)
-		end))
+		end)
 	end
+	registerBuiltins()
+	Blossom.LoadModules()
 	buildGui()
-	if DESTROYED then
+	if State.destroyed then
 		return
 	end
 	task.wait()
-	if DESTROYED then
+	if State.destroyed then
 		return
 	end
-	applyTheme(CURRENT_THEME, false)
-	preloadThemeImages(CURRENT_THEME)
-	local skinBtn = SkinButtons[skinName]
-	if skinBtn then
-		setButtonActive(skinBtn, true)
-	end
-	PLAYER:SetAttribute("BlossomSkin", skinName)
-	print("Blossom sample theme JSON:")
-	print(themeToJSON(CURRENT_THEME))
+	applyTheme(State.theme, false)
+	State.ready = true
 	runStartup()
-	if AutoExecute then
+	if State.autoExecute then
 		task.spawn(function()
-			task.wait(0.8)
-			if DESTROYED then
-				return
-			end
-			local ok, err = pcall(function()
-				playGallery()
-			end)
-			if not ok then
-				warn("Blossom auto execute skipped: " .. tostring(err))
+			task.wait(1)
+			for _, module in ipairs(Blossom.Modules) do
+				if module.AutoRun and module.Run then
+					runModule(module)
+				end
 			end
 		end)
 	end
 end
 
 destroyAll = function()
-	if DESTROYED then
+	if State.destroyed then
 		return
 	end
-	DESTROYED = true
-	TOKEN = TOKEN + 1
-	PLAYING = false
-	CancelWindowDrag = nil
-	if DebugState.conn then
-		pcall(function()
-			DebugState.conn:Disconnect()
-		end)
-		DebugState.conn = nil
+	State.destroyed = true
+	State.token = State.token + 1
+	State.playing = false
+	for _, module in ipairs(Blossom.Modules) do
+		pcall(stopModule, module, true)
+		if module.OnUnmount then
+			pcall(module.OnUnmount, moduleContext(module))
+		end
 	end
-	cancelList(STAGE_TWEENS)
-	cancelList(THEME_TWEENS)
-	cancelList(TWEENS)
-	for _, c in ipairs(CONNS) do
+	if State.debugConn then
 		pcall(function()
-			c:Disconnect()
+			State.debugConn:Disconnect()
 		end)
+		State.debugConn = nil
 	end
-	table.clear(CONNS)
-	for _, c in ipairs(STAGE_CONNS) do
-		pcall(function()
-			c:Disconnect()
-		end)
+	cancelList(StageTweens)
+	cancelList(ThemeTweens)
+	cancelList(TweenList)
+	cancelList(PetalTweens)
+	for _, list in ipairs({ Connections, StageConnections }) do
+		for _, conn in ipairs(list) do
+			pcall(function()
+				conn:Disconnect()
+			end)
+		end
+		table.clear(list)
 	end
-	table.clear(STAGE_CONNS)
-	cancelList(PETAL_TWEENS)
-	table.clear(REFRESH)
-	if Blur then
+	table.clear(REBUILD)
+	if State.blur then
 		pcall(function()
-			Blur:Destroy()
+			State.blur:Destroy()
 		end)
-		Blur = nil
+		State.blur = nil
 	end
-	if Gui then
+	if State.gui then
 		pcall(function()
-			Gui:Destroy()
+			State.gui:Destroy()
 		end)
-		Gui = nil
+		State.gui = nil
 	end
 	destroyGuiCopies()
-	if _G["BlossomDestroy"] == destroyAll then
-		_G["BlossomDestroy"] = nil
+	if _G.BlossomDestroy == destroyAll then
+		_G.BlossomDestroy = nil
 	end
 	print("Blossom destroyed")
+end
+
+Blossom.Config = CONFIG
+
+Blossom.Destroy = function()
+	destroyAll()
+end
+
+Blossom.Show = function()
+	if not State.mainVisible then
+		showMain(true)
+	end
+end
+
+Blossom.Hide = function()
+	hideMain(false)
+end
+
+Blossom.Toast = function(text, isError)
+	toast(text, isError)
+end
+
+Blossom.ApplySkin = function(name)
+	return Blossom.SetSkin(name)
+end
+
+Blossom.RefreshLayout = function()
+	updateLayout()
 end
 
 local started, failure = pcall(main)
 if not started then
 	pcall(destroyAll)
-	DESTROYED = false
+	State.destroyed = false
 	showFatal(failure)
-	warn("Blossom error: " .. tostring(failure))
+	warn("[Blossom] startup error: " .. tostring(failure))
 end
