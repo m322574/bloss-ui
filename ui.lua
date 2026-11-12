@@ -9,7 +9,7 @@ local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Blossom = {
-	Version = "3.0",
+	Version = "3.5",
 	Modules = {},
 	ModuleById = {},
 	ModuleErrors = {},
@@ -439,7 +439,6 @@ local function computeMetrics()
 end
 
 local Connections = {}
-local StageConnections = {}
 local TweenList = {}
 local StageTweens = {}
 local PetalTweens = {}
@@ -449,12 +448,6 @@ local TweenIndex = setmetatable({}, { __mode = "k" })
 local function connect(signal, fn)
 	local conn = signal:Connect(fn)
 	table.insert(Connections, conn)
-	return conn
-end
-
-local function connectStage(signal, fn)
-	local conn = signal:Connect(fn)
-	table.insert(StageConnections, conn)
 	return conn
 end
 
@@ -882,6 +875,22 @@ local openCustomize, closeCustomize
 local playGallery, captureShot, toggleDebug
 local showMain, hideMain
 local saveProfile, loadProfile, applyVisibility
+
+local SliderConnections = {}
+local function connectSlider(signal, fn)
+	local conn = signal:Connect(fn)
+	table.insert(SliderConnections, conn)
+	return conn
+end
+
+local function clearSliderConnections()
+	for i = #SliderConnections, 1, -1 do
+		pcall(function()
+			SliderConnections[i]:Disconnect()
+		end)
+		table.remove(SliderConnections, i)
+	end
+end
 
 local function addRule(row, inset)
 	local pad = tonumber(inset) or 10
@@ -1490,7 +1499,7 @@ local function makeSlider(parent, opts)
 		return true
 	end
 
-	connect(UserInputService.InputBegan, function(input)
+	connectSlider(UserInputService.InputBegan, function(input)
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
 			return
 		end
@@ -1508,7 +1517,7 @@ local function makeSlider(parent, opts)
 			commit(valueFromInput(input), false, true)
 		end
 	end)
-	connect(UserInputService.InputChanged, function(input)
+	connectSlider(UserInputService.InputChanged, function(input)
 		if not state.dragging then
 			return
 		end
@@ -1524,7 +1533,7 @@ local function makeSlider(parent, opts)
 		end
 		commit(valueFromInput(input) + state.offset, false, true)
 	end)
-	connect(UserInputService.InputEnded, function(input)
+	connectSlider(UserInputService.InputEnded, function(input)
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
 			return
 		end
@@ -1869,6 +1878,7 @@ local function sanitizeModule(spec)
 		OnMount = type(spec.OnMount) == "function" and spec.OnMount or nil,
 		OnUnmount = type(spec.OnUnmount) == "function" and spec.OnUnmount or nil,
 		AutoRun = spec.AutoRun == true,
+		AutoStarted = false,
 		Running = false,
 		Status = "idle",
 		Page = nil,
@@ -1894,6 +1904,13 @@ function Blossom.RegisterModule(spec)
 			recordModuleError(module.Id, mountErr)
 		end
 	end
+	if State.ready and State.rebuildModulesPage then
+		safeCall(State.rebuildModulesPage)
+	end
+	if State.ready and State.autoExecute and module.AutoRun and module.Run and not module.AutoStarted then
+		module.AutoStarted = true
+		runModule(module)
+	end
 	return module
 end
 
@@ -1906,7 +1923,13 @@ function Blossom.UnregisterModule(id)
 	if module.OnUnmount then
 		safeCall(module.OnUnmount, moduleContext(module))
 	end
-	if module.Page then
+	if State.onModuleUnregistered then
+		local ok, err = safeCall(State.onModuleUnregistered, module)
+		if not ok then
+			recordModuleError(module.Id, err)
+		end
+	end
+	if module.Page and module.Page.Parent then
 		module.Page.Parent.Visible = false
 	end
 	if module.NavRow then
@@ -1918,6 +1941,9 @@ function Blossom.UnregisterModule(id)
 			table.remove(Blossom.Modules, index)
 			break
 		end
+	end
+	if State.rebuildModulesPage then
+		safeCall(State.rebuildModulesPage)
 	end
 	return true
 end
@@ -1937,6 +1963,7 @@ runModule = function(module)
 	if module.Refresh then
 		safeCall(module.Refresh)
 	end
+	refreshAll()
 	task.spawn(function()
 		local ok, err = safeCall(module.Run, moduleContext(module))
 		module.Running = false
@@ -1952,6 +1979,9 @@ runModule = function(module)
 		end
 		if module.Refresh and not State.destroyed then
 			safeCall(module.Refresh)
+		end
+		if not State.destroyed then
+			refreshAll()
 		end
 	end)
 end
@@ -1974,6 +2004,9 @@ stopModule = function(module, silent)
 	end
 	if module.Refresh and not State.destroyed then
 		safeCall(module.Refresh)
+	end
+	if not State.destroyed then
+		refreshAll()
 	end
 end
 
@@ -2080,6 +2113,9 @@ function Blossom.LoadModules()
 	loadFromGlobal()
 	loadFromReplicatedStorage()
 	loadFromFiles()
+	if State.rebuildModulesPage then
+		safeCall(State.rebuildModulesPage)
+	end
 	return #Blossom.Modules - before
 end
 
@@ -2106,6 +2142,8 @@ local CATEGORY_ICONS = {
 }
 
 local ShellConnections = {}
+local ShellConnectionStart, ShellConnectionEnd = 0, 0
+local ShellRebuildStart, ShellRebuildEnd = 0, 0
 local setPage
 local addPage
 local mountModule
@@ -2124,6 +2162,25 @@ local function clearShell()
 		end)
 		table.remove(ShellConnections, i)
 	end
+	clearSliderConnections()
+	if ShellConnectionStart > 0 and ShellConnectionEnd >= ShellConnectionStart then
+		for i = ShellConnectionEnd, ShellConnectionStart, -1 do
+			local conn = Connections[i]
+			if conn then
+				pcall(function()
+					conn:Disconnect()
+				end)
+			end
+			table.remove(Connections, i)
+		end
+	end
+	ShellConnectionStart, ShellConnectionEnd = 0, 0
+	if ShellRebuildStart > 0 and ShellRebuildEnd >= ShellRebuildStart then
+		for i = ShellRebuildEnd, ShellRebuildStart, -1 do
+			table.remove(REBUILD, i)
+		end
+	end
+	ShellRebuildStart, ShellRebuildEnd = 0, 0
 	if State.main then
 		pcall(function()
 			State.main:Destroy()
@@ -2370,6 +2427,13 @@ setPage = function(index, instant)
 			State.bannerTitle.TextTransparency = 0
 			State.bannerSub.TextTransparency = 0
 		end
+	end
+end
+
+State.onModuleUnregistered = function(module)
+	local index = module.Page and State.pageIndexById["module:" .. module.Id]
+	if index and State.activePage == index then
+		setPage(1, true)
 	end
 end
 
@@ -2746,12 +2810,24 @@ local function updateLayout()
 	if not State.mainColumn or not State.rootScale then
 		return
 	end
+	if State.relayoutCustomize then
+		State.relayoutCustomize()
+	end
 	if State.compact ~= nil and State.compact ~= Metrics.compact then
 		local page = State.activePage
-		buildMain()
-		if page and page > 0 then
-			setPage(math.min(page, #State.pages), true)
+		local pageId
+		for id, index in pairs(State.pageIndexById) do
+			if index == page then
+				pageId = id
+				break
+			end
 		end
+		buildMain()
+		local target = pageId and State.pageIndexById[pageId]
+		if not target or target < 1 or target > #State.pages then
+			target = 1
+		end
+		setPage(target, true)
 		applyVisibility()
 		return
 	end
@@ -2845,7 +2921,7 @@ local function buildLoader(scroll)
 		Build = function(row)
 			local button = smallButton(row, "Play", 76, 1, "Primary")
 			placeRight(button.Instance, 76)
-			button:Run(function()
+			button:Bind(function()
 				playGallery()
 			end)
 		end,
@@ -2898,7 +2974,7 @@ local function buildLoader(scroll)
 	})
 end
 
-local function buildModules(scroll)
+local function renderModules(scroll)
 	local head = makeCard(scroll, { Title = "Registry", Order = 1 })
 	makeRow(head, {
 		Label = "Reload module sources",
@@ -2907,7 +2983,7 @@ local function buildModules(scroll)
 		Build = function(row)
 			local button = smallButton(row, "Reload", 84, 1, "Ghost")
 			placeRight(button.Instance, 84)
-			button:Run(function()
+			button:Bind(function()
 				local loaded = Blossom.LoadModules()
 				toast(loaded .. " new module(s) loaded")
 			end)
@@ -2958,6 +3034,23 @@ local function buildModules(scroll)
 			})
 		end
 	end
+end
+
+local function buildModules(scroll)
+	State.rebuildModulesPage = function()
+		task.defer(function()
+			if State.destroyed or not scroll.Parent then
+				return
+			end
+			for _, child in ipairs(scroll:GetChildren()) do
+				if child.Name == "Card" then
+					child:Destroy()
+				end
+			end
+			renderModules(scroll)
+		end)
+	end
+	renderModules(scroll)
 end
 
 local function buildSettings(scroll)
@@ -3126,7 +3219,8 @@ local function buildControls(scroll, module)
 end
 
 mountModule = function(module)
-	if module.Page then
+	local existing = module.Page
+	if existing and existing.Parent and existing.Parent.Parent == State.pagesHost then
 		return
 	end
 	local scroll, navRow = addPage(module.Title, module.Subtitle, module.Icon, "module:" .. module.Id)
@@ -3198,9 +3292,6 @@ mountModule = function(module)
 			recordModuleError(module.Id, err)
 		end
 	end
-	if module.AutoRun and module.Run then
-		runModule(module)
-	end
 end
 
 buildModulePage = function(module)
@@ -3214,8 +3305,10 @@ buildMain = function()
 	if State.main then
 		clearShell()
 	end
-	computeMetrics()
+	Metrics = computeMetrics()
 	State.compact = Metrics.compact
+	local connectionStart = #Connections + 1
+	local rebuildStart = #REBUILD + 1
 	State.main = new("Frame", {
 		Name = "Main",
 		Size = UDim2.fromScale(1, 1),
@@ -3266,6 +3359,11 @@ buildMain = function()
 	end
 	buildSettings(addPage("Settings", "appearance and about", "cog", "settings"))
 	setPage(1, true)
+
+	ShellConnectionStart = connectionStart
+	ShellConnectionEnd = #Connections
+	ShellRebuildStart = rebuildStart
+	ShellRebuildEnd = #REBUILD
 
 	connectShell(titlebar.InputBegan, function(input)
 		if not State.mainVisible or not State.mainColumn then
@@ -3947,6 +4045,21 @@ local function buildCustomize()
 		actionButtons[index] = button
 	end
 
+	local function relayout()
+		local scale = (State.rootScale and State.rootScale.Scale) or 1
+		local vp = viewport()
+		local width = math.floor(math.min(440, vp.X / math.max(0.1, scale) - 24))
+		local height = math.floor(clamp(vp.Y / math.max(0.1, scale) * 0.3, 96, 220))
+		panel.Size = UDim2.new(0, width, 0, 0)
+		box.Size = UDim2.new(1, 0, 0, height)
+		local actionWidth = math.floor((width - 24 - 18) / 4)
+		for index, button in ipairs(actionButtons) do
+			button.Instance.Size = UDim2.new(0, actionWidth, 1, 0)
+			button.Instance.Position = UDim2.new(0, (index - 1) * (actionWidth + 6), 0, 0)
+		end
+	end
+	State.relayoutCustomize = relayout
+
 	State.customTab = "Theme"
 	local function setTab(tab)
 		State.customTab = tab == "Config" and "Config" or "Theme"
@@ -4164,18 +4277,22 @@ closeCustomize = function()
 	end
 end
 
+local function resetCountdown()
+	if not State.countdown then
+		return
+	end
+	cancelProps(State.countdown, { TextTransparency = true })
+	State.countdown.Text = ""
+	State.countdown.TextTransparency = 1
+end
+
 local function clearStage()
+	resetCountdown()
 	if not State.stage then
 		return
 	end
 	cancelList(StageTweens)
 	cancelList(PetalTweens)
-	for i = #StageConnections, 1, -1 do
-		pcall(function()
-			StageConnections[i]:Disconnect()
-		end)
-		table.remove(StageConnections, i)
-	end
 	for _, child in ipairs(State.stage:GetChildren()) do
 		child:Destroy()
 	end
@@ -4309,6 +4426,7 @@ playGallery = function()
 	if State.playing then
 		abortLoader(true)
 	end
+	resetCountdown()
 	State.playing = true
 	State.token = State.token + 1
 	local token = State.token
@@ -4497,7 +4615,7 @@ local function handleInput(input)
 end
 
 local function buildGui()
-	computeMetrics()
+	Metrics = computeMetrics()
 	local gui = new("ScreenGui", {
 		Name = CONFIG.GuiName,
 		ResetOnSpawn = false,
@@ -4775,7 +4893,8 @@ local function main()
 		task.spawn(function()
 			task.wait(1)
 			for _, module in ipairs(Blossom.Modules) do
-				if module.AutoRun and module.Run then
+				if module.AutoRun and module.Run and not module.AutoStarted then
+					module.AutoStarted = true
 					runModule(module)
 				end
 			end
@@ -4802,18 +4921,17 @@ destroyAll = function()
 		end)
 		State.debugConn = nil
 	end
+	clearSliderConnections()
 	cancelList(StageTweens)
 	cancelList(ThemeTweens)
 	cancelList(TweenList)
 	cancelList(PetalTweens)
-	for _, list in ipairs({ Connections, StageConnections }) do
-		for _, conn in ipairs(list) do
-			pcall(function()
-				conn:Disconnect()
-			end)
-		end
-		table.clear(list)
+	for _, conn in ipairs(Connections) do
+		pcall(function()
+			conn:Disconnect()
+		end)
 	end
+	table.clear(Connections)
 	table.clear(REBUILD)
 	if State.blur then
 		pcall(function()
