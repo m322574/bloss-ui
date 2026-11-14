@@ -9,7 +9,7 @@ local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Blossom = {
-	Version = "3.5",
+	Version = "3.0.2",
 	Modules = {},
 	ModuleById = {},
 	ModuleErrors = {},
@@ -247,6 +247,11 @@ local CONFIG = {
 		Screenshot = Enum.KeyCode.F12,
 		Hide = Enum.KeyCode.RightShift,
 	},
+	GamepadKeys = {
+		Hide = Enum.KeyCode.ButtonY,
+		Debug = Enum.KeyCode.DPadUp,
+		Screenshot = Enum.KeyCode.DPadDown,
+	},
 	Durations = {
 		Scale = 1,
 		Splash = 1.5,
@@ -318,6 +323,39 @@ local CONFIG = {
 	},
 }
 
+local DEFAULT_KEYS = copy(CONFIG.Keys)
+local DEFAULT_GAMEPAD_KEYS = copy(CONFIG.GamepadKeys)
+local GAMEPAD_LABELS = {
+	ButtonA = "A", ButtonB = "B", ButtonX = "X", ButtonY = "Y",
+	ButtonL1 = "LB", ButtonR1 = "RB", ButtonL2 = "LT", ButtonR2 = "RT",
+	ButtonL3 = "LS", ButtonR3 = "RS", ButtonStart = "Start", ButtonSelect = "Select",
+	DPadUp = "D↑", DPadDown = "D↓", DPadLeft = "D←", DPadRight = "D→",
+}
+
+local function keyLabel(key)
+	if key == nil then
+		return "—"
+	end
+	local name = key.Name
+	if type(name) ~= "string" then
+		return tostring(key)
+	end
+	if GAMEPAD_LABELS[name] then
+		return GAMEPAD_LABELS[name]
+	end
+	if name:sub(1, 6) == "Button" then
+		return name:sub(7)
+	end
+	if name:sub(1, 4) == "DPad" then
+		return "D" .. name:sub(5)
+	end
+	return name
+end
+
+local function bindingLabel(action)
+	return keyLabel(CONFIG.Keys[action]) .. " / " .. keyLabel(CONFIG.GamepadKeys[action])
+end
+
 local EASING_STYLES = {
 	Linear = Enum.EasingStyle.Linear, Quad = Enum.EasingStyle.Quad, Cubic = Enum.EasingStyle.Cubic,
 	Quart = Enum.EasingStyle.Quart, Quint = Enum.EasingStyle.Quint, Sine = Enum.EasingStyle.Sine,
@@ -374,6 +412,11 @@ local State = {
 	compact = nil,
 	lastViewport = Vector2.zero,
 	rebuildQueued = false,
+	windowLocked = false,
+	windowCenter = nil,
+	captureAction = nil,
+	captureButton = nil,
+	reopen = nil,
 }
 
 local Metrics = {
@@ -873,7 +916,7 @@ local toast
 local setStatusLabel
 local openCustomize, closeCustomize
 local playGallery, captureShot, toggleDebug
-local showMain, hideMain
+local showMain, hideMain, toggleMenu, beginKeyCapture, cancelKeyCapture
 local saveProfile, loadProfile, applyVisibility
 
 local SliderConnections = {}
@@ -2218,6 +2261,7 @@ local function clampCenter(center)
 end
 
 local function applyCenter(center)
+	State.windowCenter = center
 	local scale = (State.rootScale and State.rootScale.Scale) or 1
 	State.mainColumn.Position = UDim2.fromOffset(center.X / scale, center.Y / scale)
 end
@@ -2479,6 +2523,7 @@ local function buildTitlebar(parent)
 		ZIndex = 7,
 	})
 	local closeSize = Device.touch and 40 or 26
+	local lockSize = Device.touch and 54 or 44
 	local close = makeButton(bar, {
 		Text = "X",
 		Variant = "Ghost",
@@ -2491,7 +2536,29 @@ local function buildTitlebar(parent)
 	close.Instance.AnchorPoint = Vector2.new(1, 0.5)
 	close.Instance.Position = UDim2.new(1, -6, 0.5, 0)
 	close:Bind(function()
-		hideMain(false)
+		toggleMenu()
+	end)
+	local lock = makeButton(bar, {
+		Text = State.windowLocked and "Locked" or "Lock",
+		Variant = "Ghost",
+		Size = UDim2.new(0, lockSize, 0, closeSize),
+		TextSize = 10,
+		Bold = true,
+		Radius = 6,
+		ZIndex = 7,
+	})
+	lock.Instance.AnchorPoint = Vector2.new(1, 0.5)
+	lock.Instance.Position = UDim2.new(1, -(closeSize + 10), 0.5, 0)
+	lock:SetActive(State.windowLocked)
+	lock:Bind(function()
+		State.windowLocked = not State.windowLocked
+		lock:SetText(State.windowLocked and "Locked" or "Lock")
+		lock:SetActive(State.windowLocked)
+		if State.windowLocked then
+			drag.active = false
+		end
+		saveProfile()
+		toast(State.windowLocked and "Window locked" or "Window unlocked")
 	end)
 	if Metrics.compact then
 		local gear = makeButton(bar, {
@@ -2502,7 +2569,7 @@ local function buildTitlebar(parent)
 			ZIndex = 7,
 		})
 		gear.Instance.AnchorPoint = Vector2.new(1, 0.5)
-		gear.Instance.Position = UDim2.new(1, -(closeSize + 10), 0.5, 0)
+		gear.Instance.Position = UDim2.new(1, -(closeSize + lockSize + 20), 0.5, 0)
 		local icon = makeIcon(gear.Instance, "cog")
 		icon.AnchorPoint = Vector2.new(0.5, 0.5)
 		icon.Position = UDim2.fromScale(0.5, 0.5)
@@ -2518,7 +2585,7 @@ local function buildTitlebar(parent)
 			FixedSize = true,
 			TextSize = 11,
 			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -44, 0.5, 0),
+			Position = UDim2.new(1, -(closeSize + lockSize + 18), 0.5, 0),
 			Size = UDim2.new(0, 40, 1, 0),
 			XAlign = Enum.TextXAlignment.Right,
 			ZIndex = 7,
@@ -2786,12 +2853,9 @@ showMain = function(animated)
 	State.loading = false
 	manageBlur()
 	setBackdrop("main")
-	if animated and not Device.mobile then
-		State.mainColumn.Position = UDim2.new(0.5, 0, 0.5, 12)
-		uiTween(State.mainColumn, { Position = UDim2.fromScale(0.5, 0.5) }, CONFIG.Durations.Slide, "Quint", "Out")
-	else
-		State.mainColumn.Position = UDim2.fromScale(0.5, 0.5)
-	end
+	local vp = viewport()
+	local target = State.windowCenter or Vector2.new(vp.X * 0.5, vp.Y * 0.5)
+	applyCenter(clampCenter(target))
 	applyVisibility()
 end
 
@@ -2799,9 +2863,9 @@ hideMain = function(instant)
 	if not State.main then
 		return
 	end
+	cancelKeyCapture()
 	State.mainVisible = false
 	State.main.Visible = false
-	State.mainColumn.Position = UDim2.fromScale(0.5, 0.5)
 	applyVisibility()
 end
 
@@ -2833,6 +2897,11 @@ local function updateLayout()
 	end
 	State.rootScale.Scale = Metrics.scale
 	State.mainColumn.Size = UDim2.fromOffset(Metrics.width, Metrics.height)
+	if State.windowCenter then
+		applyCenter(clampCenter(State.windowCenter))
+	else
+		State.mainColumn.Position = UDim2.fromScale(0.5, 0.5)
+	end
 	if Metrics.compact then
 		State.navList.Size = UDim2.new(1, 0, 0, Metrics.nav)
 		State.navList.Position = UDim2.new(0, 0, 0, Metrics.topbar)
@@ -3147,6 +3216,77 @@ local function buildSettings(scroll)
 	makeListRow(info, { Title = "Tap target", Subtitle = tostring(Metrics.button) .. "px minimum", Order = 3 })
 end
 
+local function buildKeybinds(scroll)
+	local binds = makeCard(scroll, { Title = "Keybinds", Order = 1 })
+	local actions = {
+		{ id = "Hide", label = "Hide / show" },
+		{ id = "Debug", label = "Debug overlay" },
+		{ id = "Screenshot", label = "Screenshot" },
+		{ id = "Destroy", label = "Destroy" },
+		{ id = "DestroyModifier", label = "Destroy modifier" },
+	}
+	for order, action in ipairs(actions) do
+		local width = 156
+		makeRow(binds, {
+			Label = action.label,
+			Order = order,
+			ControlWidth = width,
+			Build = function(row)
+				local button = makeButton(row, {
+					Text = bindingLabel(action.id),
+					Variant = "Ghost",
+					Size = UDim2.new(0, width, 0, math.max(30, Metrics.button - 4)),
+					TextSize = Metrics.captionSize,
+					Order = 1,
+				})
+				placeRight(button.Instance, width)
+				button:Bind(function()
+					beginKeyCapture(action.id, button)
+				end)
+				table.insert(REBUILD, function()
+					button:SetText(bindingLabel(action.id))
+				end)
+			end,
+		})
+	end
+	makeRow(binds, {
+		Label = "Reset bindings",
+		Order = #actions + 1,
+		ControlWidth = 112,
+		Build = function(row)
+			local button = smallButton(row, "Reset", 84, 1, "Ghost")
+			placeRight(button.Instance, 84)
+			button:Bind(function()
+				CONFIG.Keys = copy(DEFAULT_KEYS)
+				CONFIG.GamepadKeys = copy(DEFAULT_GAMEPAD_KEYS)
+				saveProfile()
+				refreshAll()
+				toast("Bindings reset")
+			end)
+		end,
+	})
+
+	local touch = makeCard(scroll, { Title = "On-screen actions", Order = 2 })
+	local function actionButton(text, order, fn)
+		local button = makeButton(touch, {
+			Text = text,
+			Size = UDim2.new(1, 0, 0, Metrics.button),
+			Order = order,
+			Divider = true,
+		})
+		button:Bind(fn)
+	end
+	actionButton("Hide / show", 1, function()
+		toggleMenu()
+	end)
+	actionButton("Debug overlay", 2, function()
+		toggleDebug()
+	end)
+	actionButton("Screenshot", 3, function()
+		captureShot()
+	end)
+end
+
 local function buildControls(scroll, module)
 	if not module.Controls or #module.Controls == 0 then
 		return nil
@@ -3305,6 +3445,8 @@ buildMain = function()
 	if State.main then
 		clearShell()
 	end
+	State.captureAction = nil
+	State.captureButton = nil
 	Metrics = computeMetrics()
 	State.compact = Metrics.compact
 	local connectionStart = #Connections + 1
@@ -3358,6 +3500,7 @@ buildMain = function()
 		mountModule(module)
 	end
 	buildSettings(addPage("Settings", "appearance and about", "cog", "settings"))
+	buildKeybinds(addPage("Controls", "keybinds and position", "sliders", "controls"))
 	setPage(1, true)
 
 	ShellConnectionStart = connectionStart
@@ -3366,7 +3509,7 @@ buildMain = function()
 	ShellRebuildEnd = #REBUILD
 
 	connectShell(titlebar.InputBegan, function(input)
-		if not State.mainVisible or not State.mainColumn then
+		if not State.mainVisible or not State.mainColumn or State.windowLocked then
 			return
 		end
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
@@ -3399,7 +3542,10 @@ buildMain = function()
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
 			return
 		end
-		drag.active = false
+		if drag.active then
+			drag.active = false
+			saveProfile()
+		end
 	end)
 
 	updateLayout()
@@ -3797,10 +3943,31 @@ saveProfile = function()
 	if not State.player then
 		return
 	end
+	local keys = {}
+	for action, key in pairs(CONFIG.Keys) do
+		if key and key.Name then
+			keys[action] = key.Name
+		end
+	end
+	local gamepad = {}
+	for action, key in pairs(CONFIG.GamepadKeys) do
+		if key and key.Name then
+			gamepad[action] = key.Name
+		end
+	end
+	local vp = viewport()
+	local center = State.windowCenter
 	local payload = {
 		active = State.theme.Name,
 		autoExecute = State.autoExecute,
 		themes = {},
+		keys = keys,
+		gamepad = gamepad,
+		window = {
+			locked = State.windowLocked,
+			x = center and clamp(center.X / vp.X, 0, 1) or nil,
+			y = center and clamp(center.Y / vp.Y, 0, 1) or nil,
+		},
 	}
 	for _, name in ipairs(skinNames()) do
 		if not BUILTIN_SKINS[name] then
@@ -3813,6 +3980,19 @@ saveProfile = function()
 	end
 	State.player:SetAttribute("BlossomProfile", json)
 	writeProfileFile(json)
+end
+
+local function profileKey(value)
+	if type(value) ~= "string" then
+		return nil
+	end
+	local ok, key = pcall(function()
+		return Enum.KeyCode[value]
+	end)
+	if ok and key then
+		return key
+	end
+	return nil
 end
 
 loadProfile = function()
@@ -3838,6 +4018,31 @@ loadProfile = function()
 		end
 	end
 	State.autoExecute = data.autoExecute == true
+	if type(data.keys) == "table" then
+		for action in pairs(CONFIG.Keys) do
+			local key = profileKey(data.keys[action])
+			if key then
+				CONFIG.Keys[action] = key
+			end
+		end
+	end
+	if type(data.gamepad) == "table" then
+		for action in pairs(CONFIG.GamepadKeys) do
+			local key = profileKey(data.gamepad[action])
+			if key then
+				CONFIG.GamepadKeys[action] = key
+			end
+		end
+	end
+	if type(data.window) == "table" then
+		State.windowLocked = data.window.locked == true
+		local x = tonumber(data.window.x)
+		local y = tonumber(data.window.y)
+		if x and y then
+			local vp = viewport()
+			State.windowCenter = Vector2.new(clamp(x, 0, 1) * vp.X, clamp(y, 0, 1) * vp.Y)
+		end
+	end
 	if type(data.active) == "string" and SKINS[data.active] then
 		State.profileSkin = data.active
 	end
@@ -4510,12 +4715,8 @@ captureShot = function()
 	toast("Screenshot saved")
 end
 
-toggleDebug = function()
-	State.debugVisible = not State.debugVisible
-	if State.debugFrame then
-		State.debugFrame.Visible = State.debugVisible and not State.userHidden
-	end
-	if State.debugVisible then
+local function setDebugActive(active)
+	if active then
 		if State.debugConn then
 			return
 		end
@@ -4529,7 +4730,7 @@ toggleDebug = function()
 			local fps = math.floor(frames / math.max(clock, 0.0001) + 0.5)
 			clock, frames = 0, 0
 			if State.debugLabel then
-				State.debugLabel.Text = string.format("fps %d  ·  ms %.1f\ninstances %d", fps, 1000 / math.max(fps, 1), State.gui and #State.gui:GetDescendants() or 0)
+				State.debugLabel.Text = string.format("fps %d  ·  ms %.1f", fps, 1000 / math.max(fps, 1))
 			end
 		end)
 	elseif State.debugConn then
@@ -4538,6 +4739,14 @@ toggleDebug = function()
 		end)
 		State.debugConn = nil
 	end
+end
+
+toggleDebug = function()
+	if State.destroyed then
+		return
+	end
+	State.debugVisible = not State.debugVisible
+	applyVisibility()
 end
 
 local function buildDebug()
@@ -4575,43 +4784,155 @@ local function buildDebug()
 end
 
 applyVisibility = function()
+	local mainVisible = State.mainVisible and not State.userHidden
 	if State.main then
-		State.main.Visible = State.mainVisible and not State.userHidden
+		State.main.Visible = mainVisible
 	end
 	if State.customize then
 		State.customize.Visible = State.customizeOpen and not State.userHidden
 	end
+	local debugVisible = State.debugVisible and mainVisible and not State.loading
 	if State.debugFrame then
-		State.debugFrame.Visible = State.debugVisible and not State.userHidden
+		State.debugFrame.Visible = debugVisible
+	end
+	setDebugActive(debugVisible)
+	if State.reopen then
+		State.reopen.Visible = State.ready and not State.loading and not State.playing and (State.userHidden or not State.mainVisible)
 	end
 end
 
-local function toggleMenu()
-	if State.playing then
+toggleMenu = function()
+	if State.destroyed or State.playing then
+		return
+	end
+	if not State.mainVisible then
+		State.userHidden = false
+		showMain(true)
 		return
 	end
 	State.userHidden = not State.userHidden
+	if State.userHidden then
+		cancelKeyCapture()
+	end
 	applyVisibility()
 	toast(State.userHidden and "Menu hidden" or "Menu shown")
+end
+
+cancelKeyCapture = function()
+	if not State.captureAction then
+		return
+	end
+	State.captureAction = nil
+	State.captureButton = nil
+	refreshAll()
+end
+
+local function inputIsGamepad(input)
+	local inputType = input.UserInputType
+	local name = inputType and inputType.Name or ""
+	return name:sub(1, 7) == "Gamepad"
+end
+
+beginKeyCapture = function(action, button)
+	if State.destroyed or not CONFIG.Keys[action] then
+		return
+	end
+	if State.captureAction == action then
+		State.captureAction = nil
+		State.captureButton = nil
+		refreshAll()
+		toast("Binding cancelled")
+		return
+	end
+	State.captureAction = action
+	State.captureButton = button
+	if button then
+		button:SetText("Press a key…")
+	end
+	toast("Press a keyboard or controller button")
+end
+
+local function finishKeyCapture(input)
+	local action = State.captureAction
+	if not action then
+		return false
+	end
+	local key = input.KeyCode
+	if key == Enum.KeyCode.Escape then
+		State.captureAction = nil
+		State.captureButton = nil
+		refreshAll()
+		toast("Binding cancelled")
+		return true
+	end
+	if key == nil or key.Name == nil or key == Enum.KeyCode.Unknown then
+		return true
+	end
+	local gamepad = inputIsGamepad(input)
+	if gamepad and (action == "Destroy" or action == "DestroyModifier") then
+		toast("Destroy must use a keyboard key", true)
+		return true
+	end
+	if gamepad then
+		CONFIG.GamepadKeys[action] = key
+	else
+		CONFIG.Keys[action] = key
+	end
+	State.captureAction = nil
+	State.captureButton = nil
+	saveProfile()
+	refreshAll()
+	toast(action .. " bound")
+	return true
 end
 
 local function handleInput(input)
 	if State.destroyed or not State.ready then
 		return
 	end
+	if State.captureAction then
+		finishKeyCapture(input)
+		return
+	end
 	if UserInputService:GetFocusedTextBox() then
 		return
 	end
 	local keys = CONFIG.Keys
-	if input.KeyCode == keys.Destroy and UserInputService:IsKeyDown(keys.DestroyModifier) then
+	local gamepadKeys = CONFIG.GamepadKeys
+	local isGamepad = inputIsGamepad(input)
+	local function matches(action)
+		return input.KeyCode == keys[action] or (isGamepad and input.KeyCode == gamepadKeys[action])
+	end
+	if input.KeyCode == keys.Destroy and not isGamepad and UserInputService:IsKeyDown(keys.DestroyModifier) then
 		Blossom.Destroy()
-	elseif input.KeyCode == keys.Debug then
+	elseif matches("Debug") then
 		toggleDebug()
-	elseif input.KeyCode == keys.Screenshot then
+	elseif matches("Screenshot") then
 		captureShot()
-	elseif input.KeyCode == keys.Hide then
+	elseif matches("Hide") then
 		toggleMenu()
 	end
+end
+
+local function buildReopen()
+	local height = Device.touch and 44 or 36
+	local button = makeButton(State.root, {
+		Text = clean(CONFIG.Brand.Name, 24),
+		Variant = "Primary",
+		Size = UDim2.new(0, 112, 0, height),
+		TextSize = 12,
+		Bold = true,
+		Radius = 16,
+		ZIndex = 25,
+	})
+	button.Instance.AnchorPoint = Vector2.new(0, 1)
+	button.Instance.Position = UDim2.new(0, 12, 1, -12)
+	button.Instance.Visible = false
+	button.Instance:SetAttribute("Reopen", true)
+	button:Bind(function()
+		toggleMenu()
+	end)
+	State.reopen = button.Instance
 end
 
 local function buildGui()
@@ -4684,6 +5005,7 @@ local function buildGui()
 	buildMain()
 	buildCustomize()
 	buildDebug()
+	buildReopen()
 	gui:SetAttribute("Building", false)
 end
 
@@ -4959,13 +5281,18 @@ Blossom.Destroy = function()
 end
 
 Blossom.Show = function()
+	State.userHidden = false
 	if not State.mainVisible then
 		showMain(true)
+	else
+		applyVisibility()
 	end
 end
 
 Blossom.Hide = function()
-	hideMain(false)
+	State.userHidden = true
+	cancelKeyCapture()
+	applyVisibility()
 end
 
 Blossom.Toast = function(text, isError)
